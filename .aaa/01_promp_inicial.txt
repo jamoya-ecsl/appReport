@@ -1,0 +1,272 @@
+Actúa como un experto en Google AppSheet, diseño de bases de datos, control de accesos por roles y aplicaciones para la gestión agrícola.
+
+Quiero crear una aplicación de “Partes de Trabajo” para una empresa agrícola utilizando AppSheet. Ya tengo un archivo Excel con las hojas que representan las tablas y los campos de la aplicación. Voy a adjuntar ese archivo para que lo analices.
+
+## Objetivo de la aplicación
+
+La aplicación debe permitir registrar y consultar los partes de trabajo realizados por los empleados de la empresa agrícola.
+
+Debe incluir un sistema de acceso por roles:
+
+1. Usuarios básicos o trabajadores:
+   - Solo pueden ver sus propios partes de trabajo.
+   - Pueden crear nuevos partes.
+   - Pueden modificar sus partes únicamente cuando estén en estado pendiente, si lo consideras recomendable.
+   - No pueden ver los partes de otros trabajadores.
+   - No pueden acceder a información de supervisores ni administradores.
+
+2. Supervisores:
+   - Pueden ver los partes de los trabajadores que supervisan.
+   - Pueden revisar, modificar o validar los partes, según la estructura más adecuada.
+   - Deben poder filtrar la información por trabajador, fecha, finca, cultivo, tarea y estado.
+   - No deben acceder a información que no corresponda a su ámbito, salvo que se indique expresamente.
+
+3. Administradores:
+   - Pueden ver y gestionar todos los datos.
+   - Pueden administrar usuarios, trabajadores, fincas, cultivos, tareas y configuraciones.
+   - Pueden corregir o modificar cualquier parte.
+
+## Trabajo que debes realizar
+
+Primero analiza el archivo Excel completo y explícame qué cambios propones. No generes todavía la estructura definitiva ni elimines ninguna columna. Espera a que confirme los cambios antes de continuar.
+
+Analiza detalladamente el archivo Excel adjunto y realiza lo siguiente:
+
+### 1. Análisis de la estructura
+
+- Identifica todas las hojas existentes.
+- Identifica las tablas, columnas y tipos de datos.
+- Detecta errores de diseño, campos duplicados o innecesarios.
+- Comprueba si las relaciones entre tablas están correctamente planteadas.
+- Indica qué columnas deberían ser claves únicas.
+- Indica qué columnas deberían utilizar referencias entre tablas.
+- Detecta posibles problemas con nombres de columnas, valores vacíos o datos inconsistentes.
+- Propón los cambios necesarios para que el archivo funcione correctamente como base de datos para AppSheet.
+
+### 2. Diseño recomendado de las tablas
+
+Para cada hoja o tabla, indica:
+
+- Nombre recomendado de la tabla.
+- Función de la tabla.
+- Columnas necesarias.
+- Tipo de cada columna en AppSheet.
+- Columna Key recomendada.
+- Columna Label recomendada.
+- Columnas que deberían ser Ref.
+- Columnas que deberían tener listas desplegables.
+- Columnas obligatorias.
+- Valores iniciales.
+- Fórmulas recomendadas.
+- Relaciones entre tablas.
+- Si debe utilizarse como tabla principal, auxiliar o de configuración.
+
+Si es necesario crear nuevas tablas, indícalo claramente. Por ejemplo:
+
+- Usuarios.
+- Roles.
+- Trabajadores.
+- Supervisores.
+- Fincas.
+- Parcelas.
+- Cultivos.
+- Tareas.
+- Partes de trabajo.
+- Detalle de partes.
+- Estados.
+- Empresas o centros de trabajo.
+
+### 3. Control de acceso y seguridad
+
+Diseña un sistema de usuarios por roles para AppSheet.
+
+Propón las columnas necesarias en la tabla de usuarios, por ejemplo:
+
+- Email.
+- Nombre.
+- Usuario o trabajador relacionado.
+- Rol.
+- Supervisor relacionado.
+- Empresa o centro de trabajo.
+- Activo.
+
+Proporciona las expresiones exactas de AppSheet necesarias para:
+
+- Saber qué usuario ha iniciado sesión utilizando USEREMAIL().
+- Filtrar los datos de los trabajadores.
+- Permitir que un trabajador vea solo sus propios partes.
+- Permitir que un supervisor vea los partes de los trabajadores que dependen de él.
+- Permitir que un administrador vea todos los partes.
+- Aplicar Security Filters.
+- Configurar Show_If.
+- Configurar Editable_If.
+- Configurar Valid_If.
+- Configurar Initial value.
+- Ocultar o mostrar vistas según el rol.
+
+Es muy importante diferenciar entre:
+
+- Security Filter, para proteger realmente los datos.
+- Slice, para organizar y mostrar los datos.
+- Show_If, para controlar la interfaz.
+- Editable_If, para controlar la edición.
+
+No te limites a ocultar información visualmente. La solución debe proteger los datos mediante Security Filters.
+
+### 4. Estructura de los partes de trabajo
+
+Propón la estructura más adecuada para registrar un parte de trabajo agrícola.
+
+Analiza si conviene utilizar:
+
+- Una sola tabla de partes.
+- Una tabla de cabecera de parte y otra de líneas o detalles.
+
+El parte debería poder incluir, si resulta adecuado:
+
+- Número o identificador del parte.
+- Fecha.
+- Trabajador.
+- Supervisor.
+- Finca.
+- Parcela.
+- Cultivo.
+- Tarea realizada.
+- Horas trabajadas.
+- Cantidad realizada.
+- Unidad de medida.
+- Maquinaria utilizada.
+- Observaciones.
+- Fotografías.
+- Ubicación GPS.
+- Estado del parte.
+- Fecha de revisión.
+- Usuario que revisa.
+- Comentarios del supervisor.
+- Fecha de creación.
+- Fecha de modificación.
+
+Indica qué campos son obligatorios y qué campos deben calcularse automáticamente.
+
+### 5. Fórmulas de AppSheet
+
+Proporciona las expresiones completas de AppSheet para:
+
+- Crear claves únicas.
+- Registrar automáticamente el usuario que crea el parte.
+- Registrar la fecha y hora de creación.
+- Registrar la fecha y hora de modificación.
+- Obtener automáticamente el trabajador asociado al usuario conectado.
+- Obtener automáticamente su supervisor.
+- Filtrar trabajadores según el supervisor.
+- Filtrar fincas o parcelas según la selección anterior.
+- Calcular horas trabajadas.
+- Calcular importes, si procede.
+- Cambiar el estado del parte.
+- Validar que las fechas y horas sean correctas.
+- Evitar duplicados.
+- Mostrar u ocultar campos según el rol y el estado.
+
+Utiliza sintaxis válida de AppSheet y explica brevemente dónde debe colocarse cada expresión.
+
+### 6. Vistas y funcionamiento de la aplicación
+
+Propón las vistas necesarias para cada tipo de usuario.
+
+Para trabajadores:
+
+- Inicio.
+- Nuevo parte.
+- Mis partes.
+- Detalle del parte.
+- Partes pendientes o rechazados.
+
+Para supervisores:
+
+- Inicio del supervisor.
+- Partes pendientes de revisión.
+- Partes por trabajador.
+- Partes por fecha.
+- Partes por finca o cultivo.
+- Validación y revisión de partes.
+
+Para administradores:
+
+- Panel general.
+- Todos los partes.
+- Usuarios.
+- Trabajadores.
+- Fincas y parcelas.
+- Cultivos.
+- Tareas.
+- Informes.
+
+Indica qué tipo de vista de AppSheet conviene utilizar en cada caso: Deck, Table, Detail, Form, Dashboard, Chart, Map, etc.
+
+### 7. Automatizaciones
+
+Propón bots, procesos y tareas de AppSheet para:
+
+- Avisar al supervisor cuando se cree un parte.
+- Avisar al trabajador cuando el parte sea aprobado o rechazado.
+- Enviar recordatorios sobre partes pendientes.
+- Generar un PDF del parte.
+- Enviar el PDF por correo electrónico.
+- Registrar cambios importantes.
+- Crear resúmenes semanales o mensuales.
+- Notificar incidencias o partes incompletos.
+
+Indica los eventos, condiciones y acciones necesarios.
+
+### 8. Mejora del archivo Excel
+
+Después de analizar el archivo:
+
+- Indica exactamente qué hojas deben modificarse.
+- Indica qué columnas deben añadirse, cambiarse o eliminarse.
+- Devuelve una propuesta de estructura final.
+- Si es posible, proporciona los encabezados finales de cada tabla.
+- Señala cualquier dato del Excel que pueda causar errores en AppSheet.
+- No borres información sin explicar previamente el motivo.
+- No inventes datos que no aparezcan en el archivo.
+
+### 9. Guía de implementación
+
+Crea una guía paso a paso para construir la aplicación en AppSheet:
+
+1. Preparar el Excel.
+2. Subir o conectar el archivo a AppSheet.
+3. Configurar las tablas.
+4. Configurar las claves y referencias.
+5. Configurar los tipos de columnas.
+6. Crear la tabla de usuarios.
+7. Configurar los roles.
+8. Crear los Security Filters.
+9. Crear las vistas.
+10. Crear las acciones.
+11. Crear las automatizaciones.
+12. Probar cada tipo de usuario.
+13. Publicar la aplicación.
+
+Incluye una lista de pruebas para comprobar que un trabajador, un supervisor y un administrador solo pueden hacer lo que les corresponde.
+
+## Formato de la respuesta
+
+Organiza la respuesta en los siguientes apartados:
+
+1. Resumen general.
+2. Análisis del Excel.
+3. Problemas detectados.
+4. Estructura de tablas recomendada.
+5. Relaciones entre tablas.
+6. Sistema de roles y permisos.
+7. Security Filters y expresiones AppSheet.
+8. Vistas recomendadas.
+9. Automatizaciones.
+10. Cambios que debo realizar en el Excel.
+11. Guía paso a paso de implementación.
+12. Lista final de comprobación.
+
+Sé claro y práctico. Utiliza tablas cuando ayuden a entender la información. Proporciona expresiones completas y listas para copiar en AppSheet.
+
+Si alguna decisión depende de información que no aparece en el Excel, indícalo claramente y ofrece la opción recomendada sin inventar datos.

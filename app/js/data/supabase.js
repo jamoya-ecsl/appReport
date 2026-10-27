@@ -1,0 +1,155 @@
+// MODO SUPABASE — usa las tablas de supabase/propuesta/001_esquema_partes_trabajo.sql.
+// Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS del esquema.
+// Login: enlace mágico por email (Supabase Auth). El email debe existir en public.operarios y estar activo.
+
+const intervalAMin = (v) => {
+  if (!v) return 0;
+  const [h, m] = String(v).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
+
+function traducir(error) {
+  const c = error?.code;
+  const e = new Error(error?.message || 'Error desconocido de Supabase');
+  if (c === 'PGRST205' || c === '42P01') {
+    e.message = 'Las tablas de la app no existen todavía en Supabase.';
+    e.hint = 'Hay que aplicar supabase/propuesta/001_esquema_partes_trabajo.sql (pendiente de autorización). Mientras tanto, usa el modo demo.';
+  } else if (c === '23505') e.message = 'Ya existe un parte de este operario para esa fecha (un parte por día).';
+  else if (c === '23514') e.message = 'Datos no válidos: revisa las horas o, si rechazas, el comentario.';
+  else if (c === '42501') e.message = 'No tienes permiso para esta operación.';
+  else if (c === 'PGRST116') e.message = 'Parte no encontrado o sin permiso.';
+  else if (c === 'P0001') e.message = error.message; // mensajes de las reglas de la BD (ya en español)
+  return e;
+}
+const ok = ({ data, error }) => { if (error) throw traducir(error); return data; };
+
+function traducirAuth(error) {
+  const m = String(error?.message || '');
+  const e = new Error(m || 'No se pudo iniciar sesión.');
+  if (/invalid login credentials/i.test(m)) e.message = 'Email o contraseña incorrectos.';
+  else if (/email not confirmed/i.test(m)) {
+    e.message = 'Este email aún no está confirmado.';
+    e.hint = 'Al crear el usuario en Supabase marca "Auto Confirm User", o confírmalo desde Authentication → Users.';
+  } else if (/rate limit|security purposes/i.test(m)) {
+    e.message = 'Demasiados intentos o correos enviados. Espera unos minutos.';
+    e.hint = 'El correo por defecto de Supabase tiene un límite por hora. Usa email + contraseña para las pruebas.';
+  } else if (/not authorized|address not authorized/i.test(m)) {
+    e.message = 'Supabase no puede enviar correo a esta dirección.';
+    e.hint = 'Sin SMTP propio, Supabase solo envía a miembros del equipo del proyecto. Usa email + contraseña.';
+  }
+  return e;
+}
+
+const normParte = (r) => ({
+  ...r,
+  h_ent: hhmm(r.h_ent), h_sal: hhmm(r.h_sal),
+  t_alm_min: intervalAMin(r.t_alm), t_com_min: intervalAMin(r.t_com),
+  n_lineas: Array.isArray(r.partes_det) ? (r.partes_det[0]?.count ?? r.partes_det.length) : 0,
+});
+const normLinea = (l) => ({ ...l, h_ini: hhmm(l.h_ini), h_fin: hhmm(l.h_fin) });
+
+export function createSupabaseApi(cfg) {
+  const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
+
+  async function getSession() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return null;
+    const email = session.user.email?.toLowerCase();
+    // Ficha propia: enlazada por id de cuenta o, si aún no hay id, por email (mismo criterio que app_rol()).
+    const me = ok(await sb.from('operarios').select('cod_ope, usuario, email, rol_app, activo')
+      .or(`user_id.eq.${session.user.id},and(user_id.is.null,email.eq."${email}")`).maybeSingle());
+    if (!me || !me.activo) {
+      throw Object.assign(new Error(`El email ${email} no está dado de alta como operario activo.`), {
+        hint: 'Un ADMIN debe añadirlo en la tabla operarios.', signedIn: true,
+      });
+    }
+    return me;
+  }
+
+  return {
+    mode: 'supabase',
+    reason: '',
+    getSession,
+
+    async signInEmail(email) {
+      const { error } = await sb.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { emailRedirectTo: location.origin } });
+      if (error) throw traducirAuth(error);
+    },
+    async signInPassword(email, password) {
+      const { error } = await sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) throw traducirAuth(error);
+      return getSession();
+    },
+    async signOut() { await sb.auth.signOut(); },
+
+    async listCatalogos() {
+      const [fincas, parcelas, tareas, vehiculos, aperos] = await Promise.all([
+        sb.from('fincas').select('*').order('finca'),
+        sb.from('parcelas').select('*').order('nom_parc'),
+        sb.from('tareas').select('*').order('tareas'),
+        sb.from('vehiculos').select('*').order('equipo'),
+        sb.from('aperos').select('*').order('equipo'),
+      ]);
+      return { fincas: ok(fincas), parcelas: ok(parcelas), tareas: ok(tareas), vehiculos: ok(vehiculos), aperos: ok(aperos) };
+    },
+
+    // Solo código y nombre (función operarios_nombres): gestores reciben todos; el operario, el suyo.
+    async listOperarios() { return ok(await sb.rpc('operarios_nombres')); },
+
+    // RLS filtra por rol; aquí solo se aplican los filtros de pantalla.
+    async listPartes(f = {}) {
+      let q = sb.from('partes_cab').select('*, partes_det(count)')
+        .order('fecha', { ascending: false }).order('num_parte', { ascending: false });
+      if (f.estado) q = q.eq('estado', f.estado);
+      if (f.operario) q = q.eq('operario', f.operario);
+      if (f.finca) q = q.eq('finca', f.finca);
+      if (f.desde) q = q.gte('fecha', f.desde);
+      if (f.hasta) q = q.lte('fecha', f.hasta);
+      return ok(await q).map(normParte);
+    },
+
+    async getParte(id) {
+      const r = ok(await sb.from('partes_cab').select('*, partes_det(*)').eq('id_parte', id).maybeSingle());
+      if (!r) throw new Error('Parte no encontrado o sin permiso para verlo.');
+      return { ...normParte(r), lineas: (r.partes_det || []).map(normLinea) };
+    },
+
+    // Guardado atómico con la función guardar_parte() (migración 007b). Si aún no está aplicada,
+    // se usa el método antiguo en varios pasos.
+    async saveParte({ id_parte, cab, lineas }) {
+      const rpc = await sb.rpc('guardar_parte', {
+        p_id_parte: id_parte || null,
+        p_cab: { ...cab, t_alm: `${Number(cab.t_alm_min) || 0} minutes`, t_com: `${Number(cab.t_com_min) || 0} minutes` },
+        p_lineas: lineas,
+      });
+      if (!rpc.error) return rpc.data;
+      if (rpc.error.code !== 'PGRST202') throw traducir(rpc.error);
+
+      const row = {
+        fecha: cab.fecha, h_ent: cab.h_ent, h_sal: cab.h_sal,
+        t_alm: `${Number(cab.t_alm_min) || 0} minutes`, t_com: `${Number(cab.t_com_min) || 0} minutes`,
+        h_ext: Number(cab.h_ext) || 0, mat_nave: !!cab.mat_nave,
+        finca: cab.finca, vehiculo: cab.vehiculo || null, obs: cab.obs || null,
+      };
+      let id = id_parte;
+      if (id) ok(await sb.from('partes_cab').update(row).eq('id_parte', id).select('id_parte').single());
+      else id = ok(await sb.from('partes_cab').insert({ ...row, operario: cab.operario }).select('id_parte').single()).id_parte;
+
+      ok(await sb.from('partes_det').delete().eq('id_parte', id));
+      if (lineas.length) {
+        ok(await sb.from('partes_det').insert(lineas.map((l) => ({
+          id_parte: id, tarea: l.tarea, finca: l.finca || null, parcela: l.parcela || null,
+          vehiculo: l.vehiculo || null, apero: l.apero || null, h_ini: l.h_ini, h_fin: l.h_fin, obs: l.obs || null,
+        }))));
+      }
+      return id;
+    },
+
+    // El trigger tg_partes_cab_guardas sella supervisor_revisa y fecha_revision.
+    async setEstado(id, estado, comentario) {
+      ok(await sb.from('partes_cab').update({ estado, comentario_supervisor: comentario?.trim() || null })
+        .eq('id_parte', id).select('id_parte').single());
+    },
+  };
+}

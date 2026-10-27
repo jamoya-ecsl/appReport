@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_tables",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__get_publishable_keys",
+      "PowerShell($env:SUPABASE_URL = 'https://baluwelboftnibtyjrer.supabase.co'; $env:SUPABASE_ANON_KEY = 'sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; node scripts/check-supabase.mjs; \"exit=$LASTEXITCODE\")",
+      "PowerShell($env:SUPABASE_URL = 'https://baluwelboftnibtyjrer.supabase.co'; $env:SUPABASE_ANON_KEY = 'sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; $env:PORT = '5181'; node scripts/serve.mjs)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5181 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -Confirm:$false }; \"stopped\")",
+      "PowerShell($k='sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; try { $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'https://baluwelboftnibtyjrer.supabase.co/rest/v1/rpc/rls_auto_enable' -Headers @{apikey=$k; 'Content-Type'='application/json'} -Body '{}'; \"HTTP $\\($r.StatusCode\\): $\\($r.Content\\)\" } catch { $resp=$_.Exception.Response; $sr = New-Object IO.StreamReader\\($resp.GetResponseStream\\(\\)\\); \"HTTP $\\([int]$resp.StatusCode\\): $\\($sr.ReadToEnd\\(\\)\\)\" })",
+      "mcp__supabase__query_logs",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__get_advisors",
+      "PowerShell($env:SUPABASE_URL = 'https://baluwelboftnibtyjrer.supabase.co'; $env:SUPABASE_ANON_KEY = 'sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; node scripts/check-supabase.mjs; $k=$env:SUPABASE_ANON_KEY; foreach \\($fn in 'rls_auto_enable','app_rol'\\) { try { $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri \"$env:SUPABASE_URL/rest/v1/rpc/$fn\" -Headers @{apikey=$k; 'Content-Type'='application/json'} -Body '{}'; \"rpc $fn -> HTTP $\\($r.StatusCode\\)\" } catch { $resp=$_.Exception.Response; $sr = New-Object IO.StreamReader\\($resp.GetResponseStream\\(\\)\\); \"rpc $fn -> HTTP $\\([int]$resp.StatusCode\\): $\\($sr.ReadToEnd\\(\\)\\)\" } })",
+      "PowerShell(python --version; python -c \"import openpyxl; print\\('openpyxl', openpyxl.__version__\\)\"; $k='sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; \\(Invoke-WebRequest -UseBasicParsing -Uri 'https://baluwelboftnibtyjrer.supabase.co/auth/v1/settings' -Headers @{apikey=$k}\\).Content)",
+      "PowerShell($s='C:\\\\Users\\\\jamoy\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-jamoy-Documents-CLAUDE-iTECSL-appReport\\\\38c308f6-9c73-47ab-a583-80d8b7195ffe\\\\scratchpad'; $d=\"$s\\\\xlsx_bbdd\"; New-Item -ItemType Directory -Force $d | Out-Null; Copy-Item 'BBDD_Corregida_AppSheet.xlsx' \"$s\\\\bbdd.zip\" -Force; Expand-Archive \"$s\\\\bbdd.zip\" -DestinationPath $d -Force; Get-Content \"$d\\\\xl\\\\workbook.xml\" -Raw; Get-ChildItem \"$d\\\\xl\\\\worksheets\" | Select-Object Name, Length)",
+      "PowerShell($s='C:\\\\Users\\\\jamoy\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-jamoy-Documents-CLAUDE-iTECSL-appReport\\\\38c308f6-9c73-47ab-a583-80d8b7195ffe\\\\scratchpad'; node \"$s\\\\leer_xlsx.mjs\" \"$s\\\\xlsx_bbdd\" \"$s\\\\bbdd.json\")",
+      "PowerShell($s='C:\\\\Users\\\\jamoy\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-jamoy-Documents-CLAUDE-iTECSL-appReport\\\\38c308f6-9c73-47ab-a583-80d8b7195ffe\\\\scratchpad'; New-Item -ItemType Directory -Force supabase\\\\seed | Out-Null; node \"$s\\\\generar_seed.mjs\" \"$s\\\\bbdd.json\" \"supabase\\\\seed\\\\001_catalogos_excel.sql\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5180 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; \"$\\($_.LocalAddress\\):5180 pid=$\\($_.OwningProcess\\) $\\($p.ProcessName\\) inicio=$\\($p.StartTime\\)\" }; \\(Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Select-Object ProcessId, CommandLine | Format-Table -AutoSize -Wrap | Out-String -Width 220\\))",
+      "PowerShell(foreach \\($p in 5180, 5181\\) { $c = \\(Invoke-WebRequest -UseBasicParsing \"http://localhost:$p/config.js\"\\).Content; $j = $c -replace '^window.APP_CONFIG = ','' -replace ';$',''; $o = $j | ConvertFrom-Json; \"puerto ${p}: url=$\\([bool]$o.supabaseUrl\\) clave=$\\([bool]$o.supabaseKey\\) -> $\\(if \\($o.supabaseUrl -and $o.supabaseKey\\) {'SUPABASE'} else {'DEMO'}\\)\" }; \"Fecha .env: \" + \\(Get-Item .env\\).LastWriteTime)",
+      "PowerShell(foreach \\($f in \"$env:USERPROFILE\\\\.claude\\\\settings.json\", \"$env:USERPROFILE\\\\.claude\\\\settings.local.json\", \".claude\\\\settings.json\", \".claude\\\\settings.local.json\"\\) { if \\(Test-Path $f\\) { \"=== $f\"; Get-Content $f -Raw } else { \"--- \\(no existe\\) $f\" } })",
+      "PowerShell($f = 'supabase\\\\propuesta\\\\007_funciones_app.sql'; $t = Get-Content $f -Raw -Encoding UTF8; $ini = $t.IndexOf\\('-- p_lineas: array de objetos'\\); $fin = $t.IndexOf\\('-- Operarios \\(rol OPERARIO, activos\\) sin parte'\\); \"ini=$ini fin=$fin longitud=$\\($t.Length\\)\")",
+      "PowerShell($k='sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; $s = \\(Invoke-WebRequest -UseBasicParsing -Uri 'https://baluwelboftnibtyjrer.supabase.co/auth/v1/settings' -Headers @{apikey=$k}\\).Content | ConvertFrom-Json; \"registro_desactivado=$\\($s.disable_signup\\)  email=$\\($s.external.email\\)  autoconfirmar=$\\($s.mailer_autoconfirm\\)\")",
+      "PowerShell(Start-Sleep -Seconds 45; $k='sb_publishable_HSNcl9_9i09iNzE5wIdIqQ_V8KWPF_0'; $s = \\(Invoke-WebRequest -UseBasicParsing -Uri 'https://baluwelboftnibtyjrer.supabase.co/auth/v1/settings' -Headers @{apikey=$k; 'Cache-Control'='no-cache'}\\).Content | ConvertFrom-Json; \"registro_desactivado=$\\($s.disable_signup\\)  anonimos=$\\($s.external.anonymous_users\\)\")"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}

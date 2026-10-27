@@ -1,0 +1,17 @@
+{
+  "name": "partes-trabajo-ec",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Boceto app Partes de Trabajo (Escribano Cabañero) sobre Supabase",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env scripts/serve.mjs",
+    "check:supabase": "node --env-file-if-exists=.env scripts/check-supabase.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

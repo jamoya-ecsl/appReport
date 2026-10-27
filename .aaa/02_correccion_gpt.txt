@@ -1,0 +1,82 @@
+Parte 1 de 5
+He analizado el archivo BBDD.xlsx completo (10 hojas). Aquí tienes el análisis, sin tocar ni eliminar nada todavía, tal y como pediste.
+
+1. Resumen general
+
+El archivo ya tiene una base bastante sólida: existen catálogos separados (empresas, operarios, fincas, parcelas, tareas, vehículos, aperos) y, lo más importante, ya existe de forma natural una estructura de cabecera + detalle para los partes (CABECERA = jornada del operario, P.TAREAS = líneas de tareas realizadas dentro de esa jornada, enlazadas por NUM_PARTE). Esto es exactamente el patrón que recomendaría para AppSheet, así que partimos con buen pie.
+
+El problema principal no es la falta de tablas, sino la falta de disciplina referencial: varias columnas que deberían apuntar a un catálogo (finca, vehículo, apero, tarea) están rellenas como texto libre, con valores que no coinciden con el catálogo correspondiente. Eso es justo lo que rompe una app en AppSheet (Refs rotos, dropdowns que no validan, Security Filters que fallan).
+
+Parte 2 de 
+2. Análisis del Excel, hoja por hoja
+Hoja	Filas de datos	Columnas	Función actual
+EMPRESAS	8	COD, NOMBRE	Catálogo de empresas/centros
+OPERARIOS	11	COD, USUARIO, ROL	Catálogo de trabajadores + su rol
+FINCAS	8	COD, FINCA	Catálogo de fincas
+PARCELAS	183	COD, FINCA, Nombre de la parcela, Superficie	Catálogo de parcelas (por finca)
+TAREAS	91	ID, TAREA, TIPO (vacía)	Catálogo de tareas
+VEHICULOS	113	ID_MAT, ALIAS, EQUIPO, TIPO, COD. INT.	Catálogo de maquinaria/vehículos
+APEROS	223	ID_BAS, ALIAS, EQUIPO, TIPO, CODIGO INTERNO	Catálogo de aperos/implementos
+CABECERA	2 (ejemplo)	NUM_PARTE, OPERARIO, FECHA, H.ENTRADA, H.SALIDA, ALMUERZO, COMIDA, T.HORAS, H.EXTRAS, MANT.NAVE, FINCA, VEHICULO, TIEMPO, OBS, (col. sin nombre)	Cabecera del parte diario
+P.TAREAS	3 (ejemplo)	NUM_PARTE, OPERARIO, TAREA, FINCA, PARCELA, VEHICULO, APERO, H.INICIO, H.FIN, T.HORAS, PRODUCTOS, OBS	Detalle de tareas del parte
+P. MANT.	0	(vacía)	Sin definir — parece un hueco reservado para "partes de mantenimiento"
+
+Todas las columnas COD/ID de los catálogos (EMPRESAS, OPERARIOS, FINCAS, PARCELAS, TAREAS, VEHICULOS.ID_MAT, APEROS.ID_BAS) son únicas, lo cual es una muy buena noticia: son candidatas naturales a columna Key.
+
+Parte 3 de 
+
+3. Problemas detectados
+#	Problema	Dónde	Impacto en AppSheet
+1	PARCELAS.FINCA guarda el nombre de la finca, no el código, y con espacios en blanco distintos a FINCAS.FINCA ('CASA EL POZO' vs 'CASA EL POZO ', 'LA CAMPANA ' vs 'LA CAMPANA')	PARCELAS / FINCAS	El Ref se rompería silenciosamente en esas 2 fincas: AppSheet no encontraría coincidencia
+2	P.TAREAS.FINCA mezcla códigos (MOJ) y nombres completos (GRAJUELA) en la misma columna	P.TAREAS	Columna sin criterio único de referencia, imposible de convertir en Ref fiable tal cual
+3	P.TAREAS.VEHICULO y P.TAREAS.APERO contienen texto libre que no existe en los catálogos (TRACTOR, T19, CARROS, D7 no están en VEHICULOS.ALIAS ni APEROS.ALIAS)	P.TAREAS	Sin validación real; hoy cualquiera puede escribir cualquier cosa
+4	P.TAREAS.TAREA mezcla IDs válidos (TE003), texto libre que no coincide con el catálogo (VIAJE no existe en TAREAS) y texto parecido pero no idéntico (APLICACIÓN FITOS vs APLICACIÓN FITOS POR AGUA)	P.TAREAS / TAREAS	Mismo problema: no hay integridad referencial real hoy
+5	CABECERA.VEHICULO sí coincide exactamente con VEHICULOS.EQUIPO (texto largo), pero usar el nombre largo como clave de referencia es frágil (cualquier cambio de texto rompe el Ref); lo correcto es referenciar por ID_MAT o ALIAS	CABECERA / VEHICULOS	Funciona hoy “de milagro”, pero es poco robusto
+6	Columna sin nombre en CABECERA (columna O) con datos (TIEMPO, aparentemente duplicado o mal etiquetado)	CABECERA	AppSheet necesita nombre de columna; hoy quedaría como Column15 o similar
+7	TAREAS.TIPO existe pero está vacía en las 91 filas	TAREAS	Columna inútil tal cual, aunque se puede rellenar automáticamente (ver más abajo)
+8	Los prefijos de TAREAS.ID sugieren una clasificación implícita no explotada: TE... = tareas “por hectárea” (rendimiento/superficie) y TT... = tareas “por horas”	TAREAS	Oportunidad: derivar TIPO automáticamente en vez de dejarla vacía
+9	APEROS.ALIAS = 'A9' está duplicado (dos aperos distintos comparten alias)	APEROS	Si se usa ALIAS como Label o para búsqueda rápida, genera ambigüedad
+10	Inconsistencias de escritura en catálogos: 'LEONEL ' (espacio final en OPERARIOS.USUARIO), 'AB0NADORAS' (cero en vez de letra O), 'SENBRADORAS' (typo de SEMBRADORAS), 'COSECHADORAS ' (espacio final), PLANTADORA (VEHICULOS.TIPO, singular) vs PLANTADORAS (APEROS.TIPO, plural) para el mismo concepto	Varias	Ensucian los dropdowns / Valid_If y generan valores “duplicados” de cara al usuario
+11	Horas guardadas como tipo Time (hora del día) en vez de Duration/decimal: p. ej. T.HORAS = 10:00 como hora, y en otra fila H.INICIO=11, H.FIN=19 como números enteros, no horas	CABECERA / P.TAREAS	Mezcla de tipos en la misma columna rompe el tipo Time/Duration de AppSheet; hay que decidir un único formato
+12	Fila con datos parciales en P.TAREAS (fila 5): NUM_PARTE/OPERARIO/TAREA vacíos pero con una nota en PRODUCTOS (“NITRATO TB HAY QUE PONER EL PRODUCTO Y LA DOSIS”)	P.TAREAS	Es un comentario/nota de trabajo colado como si fuera una fila de datos; hay que sacarlo de la tabla
+13	OPERARIOS no tiene columna de email, ni de empresa/centro, ni de supervisor asignado	OPERARIOS	Imprescindible para USEREMAIL(), Security Filters y jerarquía de supervisión — no existe hoy en el Excel
+14	EMPRESAS no está enlazada a ninguna otra tabla (ni FINCAS, ni OPERARIOS)	EMPRESAS	Si se necesita separar datos por empresa, hoy no hay forma de hacerlo
+15	P. MANT. está completamente vacía	P. MANT.	Hay que decidir si se desarrolla (partes de mantenimiento de maquinaria, coherente con MANT. NAVE y la tarea TALLER) o se descarta por ahora
+16	No existe ninguna columna de estado (pendiente/aprobado/rechazado) en CABECERA ni P.TAREAS, ni fechas de creación/modificación, ni supervisor que revisa, ni fotos/GPS	CABECERA	Son necesarias para el flujo de aprobación que pides; hay que añadirlas
+
+Nada de esto es grave ni indica que el diseño esté mal planteado — son el tipo de cosas típicas de un Excel que se ha ido rellenando a mano y que se puede corregir fácilmente antes de migrarlo a AppSheet.
+
+Parte 4 de 
+Cambios que propongo (a nivel de concepto, sin tocar aún el archivo)
+Convertir todas las columnas que hoy son texto libre (P.TAREAS.FINCA/VEHICULO/APERO/TAREA) en columnas que referencien el catálogo por código/ID, no por texto descriptivo.
+Unificar PARCELAS.FINCA para que referencie FINCAS.COD en vez del nombre, y corregir los espacios en blanco.
+Añadir a OPERARIOS (o crear una tabla USUARIOS nueva, ligada a OPERARIOS): email, empresa/centro, y supervisor asignado.
+Añadir a CABECERA (o a una nueva tabla si separamos cabecera/detalle de forma más formal): estado del parte, fecha de creación/modificación, usuario que crea, supervisor que revisa, fecha de revisión, comentarios del supervisor.
+Derivar TAREAS.TIPO automáticamente a partir del prefijo del ID (TE→ “Por superficie”, TT→ “Por horas”) en vez de dejarla vacía.
+Sacar la fila-comentario de P.TAREAS (fila 5) fuera de la tabla de datos.
+Unificar el formato de horas (decidir entre Duration o número decimal de horas) en toda la app.
+Limpiar los typos y espacios en blanco de los catálogos (AB0NADORAS, SENBRADORAS, COSECHADORAS , LEONEL , PLANTADORA/PLANTADORAS) y decidir qué hacer con el ALIAS duplicado A9 en APEROS.
+Nombrar la columna huérfana de CABECERA (columna O) o eliminarla si es un resto sin uso — te lo confirmo antes.
+Decidir el alcance de EMPRESAS y P. MANT. (ver preguntas abajo).
+
+PArte 5 
+Antes de pasar al diseño definitivo de tablas, roles, fórmulas y vistas (secciones 4 a 12), necesito que me confirmes 4 decisiones que no puedo deducir del Excel y que condicionan bastante el diseño final:
+
+¿Cómo se asigna hoy un supervisor (ENCARGADO) a cada trabajador (TRACTORISTA)? En el Excel no hay ninguna columna que los relacione.
+Otra lógica (lo explico)
+Para que cada persona inicie sesión con USEREMAIL() en AppSheet, hace falta un email por trabajador. Hoy 'OPERARIOS' no tiene esa columna. ¿Cómo lo resolvemos?
+Añadir columna EMAIL a OPERARIOS
+La tabla EMPRESAS existe pero no está enlazada a FINCAS ni a OPERARIOS. ¿Necesitas separar el acceso a los datos por empresa/centro de trabajo (multiempresa)?
+No por ahora
+La hoja 'P. MANT.' está vacía pero parece pensada para partes de mantenimiento de maquinaria (relacionado con 'MANT. NAVE' y la tarea 'TALLER'). ¿La incluimos en esta primera versión de la app?
+Sí, diseñarla también
+Perfecto, ya tengo casi todo lo que necesito. Solo me falta un detalle antes de pasar al diseño definitivo:
+
+Sobre la supervisión — elegiste "otra lógica". ¿Puedes explicarme cómo se asigna en la práctica un encargado a cada trabajador en tu empresa? Por ejemplo: ¿depende de la cuadrilla o equipo de trabajo del día, de la zona geográfica, de un reparto fijo que ya conocéis pero no está en ningún Excel, o de otro criterio? Con eso decido si necesito una columna SUPERVISOR fija en la tabla de operarios, una tabla intermedia de "cuadrillas", o una asignación dinámica según la finca del parte.
+
+Mientras tanto, esto es lo que ya queda confirmado para el diseño:
+
+Email: se añade una columna EMAIL directamente en OPERARIOS (aunque de momento no tengas los valores reales, dejo la columna preparada).
+Multiempresa: no hace falta separar el acceso por empresa; EMPRESAS se queda como dato informativo.
+P. MANT.: la diseñamos también, como módulo de partes de mantenimiento de maquinaria/aperos, ligado a VEHICULOS/APEROS y coherente con el campo MANT. NAVE y la tarea TALLER.
+sobre la supervisión la lógica de acceso a la aplicación seria, los administradores de la app podrían acceder a todos los datos, supervisar los partes de trabajo y añadir datos a las distintas tablas, los supervisores deben de ver todos los partes de todos los usuarios y validarlos y los operarios solo pueden ver el histórico de sus partes y generar nuevos partes suyos.
