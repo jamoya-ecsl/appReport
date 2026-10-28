@@ -5,7 +5,7 @@ import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, e
 import {
   ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable,
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
-  calcHoras, calcTotHoras, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
+  calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -261,7 +261,8 @@ async function viewDetalle(id) {
       ${campo('Entrada / salida', `${esc(p.h_ent)} – ${esc(p.h_sal)}`)}
       ${campo('Almuerzo / comida', `${esc(p.t_alm_min)} / ${esc(p.t_com_min)} min`)}
       ${campo('Total horas', `<strong>${fmtHoras(p.tot_horas)}</strong>`)}
-      ${campo('Horas extra', fmtHoras(p.h_ext))}
+      ${campo('Horas extra', `${fmtHoras(p.h_ext)}${p.h_ext_manual ? ' <span class="muted">(corregidas a mano)</span>' : ''}`)}
+      ${campo('Horas de tareas', `${fmtHoras(p.ht_tareas ?? calcHtTareas(p.lineas, st.cat))} <span class="muted">(sin motivos personales)</span>`)}
       ${campo('Mant. nave', p.mat_nave ? 'Sí' : 'No')}
       ${campo('Observaciones', esc(p.obs || '—'))}
     </dl></section>
@@ -362,9 +363,13 @@ async function viewForm(id) {
   }
   const cab = p || {
     operario: u.cod_ope, fecha: new Date().toISOString().slice(0, 10), h_ent: '07:30', h_sal: '16:00',
-    t_alm_min: 30, t_com_min: 0, h_ext: 0, mat_nave: false, obs: '',
+    t_alm_min: 30, t_com_min: 0, h_ext: 0, h_ext_manual: false, mat_nave: false, obs: '',
   };
   const { cat } = st;
+  // Horas extra (011): las calcula la BD. Solo el ADMIN ve th_jornada y puede corregirlas a mano.
+  const esAdmin = u.rol_app === 'ADMIN';
+  let th = null;
+  if (esAdmin) { try { th = await st.api.getThJornada(); } catch { th = null; } }
   // Parte nuevo: se propone una primera línea de DESPLAZAMIENTO que empieza a la hora de entrada.
   const desplazamiento = cat.tareas.find((t) => t.tipo === TIPO_DESPLAZAMIENTO && t.activo !== false);
   const lineas = p ? ordenarLineas(p.lineas) : [{ tarea: desplazamiento?.cod_tar || '', h_ini: cab.h_ent }];
@@ -383,7 +388,12 @@ async function viewForm(id) {
         <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}" required></label>
         <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}"></label>
         <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}"></label>
-        <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}"></label>
+        ${esAdmin ? `
+        <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}" ${cab.h_ext_manual ? '' : 'disabled'}>
+          <span class="muted" id="hext-auto"></span></label>
+        <label class="check"><input type="checkbox" name="h_ext_manual" ${cab.h_ext_manual ? 'checked' : ''}> Corregir horas extra a mano</label>`
+        : `<label>Horas extra <input value="${id ? esc(fmtHoras(cab.h_ext)) : ''}" placeholder="Se calculan al guardar" disabled>
+          <span class="muted">Las calcula el sistema según la jornada.</span></label>`}
         <label class="check"><input type="checkbox" name="mat_nave" ${cab.mat_nave ? 'checked' : ''}> Mantenimiento nave</label>
         <label class="wide">Observaciones <textarea name="obs" rows="2">${esc(cab.obs || '')}</textarea></label>
       </div>
@@ -453,8 +463,17 @@ async function viewForm(id) {
     refrescar();
   };
   function refrescar() {
-    const tot = calcTotHoras(Object.fromEntries(new FormData(form)));
+    const datos = Object.fromEntries(new FormData(form));
+    const tot = calcTotHoras(datos);
     main.querySelector('#tot').textContent = fmtHoras(tot);
+    if (esAdmin) {
+      const manual = form.h_ext_manual.checked;
+      const auto = calcHExt(datos, th);
+      form.h_ext.disabled = !manual;
+      if (!manual && auto != null) form.h_ext.value = auto;
+      main.querySelector('#hext-auto').textContent = th == null ? 'Se calculan al guardar.'
+        : `Calculadas: ${fmtHoras(auto)} (jornada de ${fmtHoras(th)})`;
+    }
     main.querySelector('#sin-lineas').hidden = cont.children.length > 0;
   }
 
@@ -480,9 +499,14 @@ async function viewForm(id) {
     const fd = Object.fromEntries(new FormData(form));
     const nuevaCab = {
       operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent, h_sal: fd.h_sal,
-      t_alm_min: Number(fd.t_alm_min) || 0, t_com_min: Number(fd.t_com_min) || 0, h_ext: Number(fd.h_ext) || 0,
+      t_alm_min: Number(fd.t_alm_min) || 0, t_com_min: Number(fd.t_com_min) || 0,
       mat_nave: form.mat_nave.checked, obs: fd.obs,
     };
+    // Solo el ADMIN envía horas extra corregidas; para el resto la BD las calcula.
+    if (esAdmin) {
+      nuevaCab.h_ext_manual = form.h_ext_manual.checked;
+      if (nuevaCab.h_ext_manual) nuevaCab.h_ext = Number(form.h_ext.value) || 0;
+    }
     const nuevasLineas = leerLineas();
     const msg = main.querySelector('#form-msg');
     const errores = validarParte(nuevaCab, nuevasLineas, cat);

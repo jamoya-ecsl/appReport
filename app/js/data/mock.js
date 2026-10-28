@@ -4,10 +4,10 @@
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
-  calcHoras, calcTotHoras, validarParte, ordenarLineas,
+  calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v3';  // v3: estado Cerrado y cerrado_por/fecha_cierre (migración 010)
+const KEY = 'pt-demo-v4';  // v4: configuración th_jornada y h_ext_manual (migración 011)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -60,7 +60,7 @@ const dia = (offset) => {
 function semilla() {
   const cab = (n, operario, offset, estado, extra = {}) => ({
     id_parte: `demo-${n}`, num_parte: n, operario, fecha: dia(offset),
-    h_ent: '07:30', h_sal: '16:00', t_alm_min: 30, t_com_min: 0, h_ext: 0, mat_nave: false,
+    h_ent: '07:30', h_sal: '16:00', t_alm_min: 30, t_com_min: 0, h_ext: 0, h_ext_manual: false, mat_nave: false,
     obs: '', estado,
     creado_por: OPERARIOS.find((o) => o.cod_ope === operario).email,
     fch_creacion: new Date().toISOString(), fch_modificacion: new Date().toISOString(),
@@ -94,7 +94,7 @@ function semilla() {
     L(11, 'demo-4', 'TD901', 'FD3', null, '08:00', '08:30', null, 'DEMO-0002'),
     L(12, 'demo-4', 'TT902', 'FD3', null, '08:30', '15:00', null, 'DEMO-0002'),
   ];
-  return { partes, lineas, seq: 4, cod: null };
+  return { partes, lineas, seq: 4, cod: null, config: { th_jornada: 8 } };
 }
 
 function cargar() {
@@ -110,6 +110,7 @@ export function createMockApi(reason) {
   const lineasDe = (id) => db.lineas.filter((l) => l.id_parte === id);
   const conHoras = (p) => ({
     ...p, tot_horas: calcTotHoras(p),
+    ht_tareas: calcHtTareas(lineasDe(p.id_parte), CATALOGOS),
     n_lineas: lineasDe(p.id_parte).length,
     fincas: [...new Set(lineasDe(p.id_parte).map((l) => l.finca).filter(Boolean))],
   });
@@ -128,6 +129,9 @@ export function createMockApi(reason) {
 
     async listCatalogos() { await wait(150); return structuredClone(CATALOGOS); },
     async listOperarios() { exigirSesion(); return esGestor(yo()) ? OPERARIOS : [yo()]; },
+
+    // Como la tabla configuracion (011): solo el ADMIN la ve.
+    async getThJornada() { exigirSesion(); return yo().rol_app === 'ADMIN' ? db.config.th_jornada : null; },
 
     async listPartes(f = {}) {
       exigirSesion();
@@ -181,8 +185,16 @@ export function createMockApi(reason) {
           supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null, cerrado_por: null, fecha_cierre: null };
         db.partes.push(p);
       }
-      const { operario: _ignorado, ...campos } = cab;
-      Object.assign(p, campos, { operario, fch_modificacion: ahora });
+      const anterior = id_parte ? { ...p } : null;
+      const { operario: _ignorado, h_ext: _h, h_ext_manual: _m, ...campos } = cab;
+      // Igual que tg_partes_cab_h_ext (011): la BD calcula h_ext; solo el ADMIN lo corrige a mano.
+      const hExt = resolverHExt({
+        anterior,
+        nueva: { ...campos, h_ext: cab.h_ext ?? anterior?.h_ext, h_ext_manual: cab.h_ext_manual ?? anterior?.h_ext_manual },
+        admin: u.rol_app === 'ADMIN',
+        th: db.config.th_jornada,
+      });
+      Object.assign(p, campos, hExt, { operario, fch_modificacion: ahora });
       db.lineas = db.lineas.filter((l) => l.id_parte !== p.id_parte)
         .concat(lineas.map((l, i) => ({ ...l, id_linea: `l-${p.id_parte}-${i}-${Date.now()}`, id_parte: p.id_parte })));
       guardar();

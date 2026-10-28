@@ -41,6 +41,9 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 - SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); cierra cualquiera y solo aprueba o rechaza los **Cerrados de otros**. Sus partes los revisa un ADMIN.
 - ADMIN: ve todos, edita cualquiera en cualquier estado (sigue en su estado), cierra, aprueba/rechaza y borra (con copia en auditoría).
 - Cerrar exige un parte válido y, si no es de mantenimiento en nave, al menos una tarea.
+- Horas extra (migración 011): las calcula la BD, `max(total − th_jornada, 0)` con `th_jornada` = 8 h. El operario
+  las ve sin poder cambiarlas; el ADMIN puede corregirlas a mano (se mantienen hasta que cambien horas o pausas).
+- "Horas de tareas" (`ht_tareas`): suma de las tareas sin MOTIVOS PERSONALES, calculada al consultar.
 - Solo ADMIN puede crear un parte a nombre de otro operario.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.

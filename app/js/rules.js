@@ -65,6 +65,36 @@ export function calcTotHoras(c) {
   return r2(base - (Number(c.t_alm_min) || 0) / 60 - (Number(c.t_com_min) || 0) / 60);
 }
 
+// Horas extra automáticas (migración 011): max(tot_horas − th_jornada, 0), en cuartos de hora.
+export function calcHExt(c, th) {
+  const tot = calcTotHoras(c);
+  if (tot == null || th == null) return null;
+  return Math.floor(Math.max(tot - Number(th), 0) * 4) / 4;
+}
+
+// Igual que el disparador tg_partes_cab_h_ext: decide h_ext y h_ext_manual al guardar.
+//  - Otros roles: no corrigen; si no cambian horas ni pausas se conserva lo que había.
+//  - ADMIN: se respeta su valor manual, salvo que cambien las horas sin tocar h_ext.
+export function resolverHExt({ anterior, nueva, admin, th }) {
+  const auto = calcHExt(nueva, th);
+  const horasCambian = !anterior || ['h_ent', 'h_sal', 't_alm_min', 't_com_min']
+    .some((k) => String(anterior[k]) !== String(nueva[k]));
+  if (!admin) {
+    return horasCambian ? { h_ext: auto, h_ext_manual: false }
+      : { h_ext: anterior.h_ext, h_ext_manual: anterior.h_ext_manual };
+  }
+  let respetar = !!nueva.h_ext_manual;
+  if (respetar && anterior && horasCambian && Number(nueva.h_ext) === Number(anterior.h_ext) && anterior.h_ext_manual) {
+    respetar = false;
+  }
+  return respetar ? { h_ext: Number(nueva.h_ext) || 0, h_ext_manual: true } : { h_ext: auto, h_ext_manual: false };
+}
+
+// Horas de tareas sin MOTIVOS PERSONALES (como la función ht_tareas de la BD).
+export const calcHtTareas = (lineas, cat) => r2(lineas
+  .filter((l) => tipoTarea(cat, l.tarea) !== TIPO_PERSONAL)
+  .reduce((s, l) => s + (calcHoras(l.h_ini, l.h_fin) || 0), 0));
+
 export const tipoTarea = (cat, codTar) => cat.tareas.find((t) => t.cod_tar === codTar)?.tipo || null;
 
 export const etiquetaTipo = (tipo) => ({

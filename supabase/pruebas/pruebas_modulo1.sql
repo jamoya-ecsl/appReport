@@ -1,5 +1,7 @@
 -- =====================================================================
 -- Pruebas del módulo 1 (migración 009). Ejecutar DESPUÉS de aplicar 009a y 009.
+-- (M15/M16 adaptadas a la 011: las hace el ADMIN con h_ext_manual; antes de la 011 también funcionan.)
+-- (M19 adaptada a la 010: por la API el UPDATE directo afecta a 0 filas; M19b lo prueba desde SQL.)
 -- Dashboard → SQL Editor → pegar todo → Run.
 -- Termina con un error "RESULTADOS(rollback) [...]" a propósito: muestra los resultados y
 -- deshace todo (solo puede saltar la numeración de num_parte).
@@ -136,15 +138,16 @@ begin
     reset role; res := res || to_jsonb('M14 almuerzo de 20 min (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('M14 almuerzo de 20 min: bloqueado '||sqlstate||' '||sqlerrm); end;
 
+  -- M15/M16: desde la 011 solo el ADMIN fija h_ext a mano (h_ext_manual); al operario se le ignora.
   begin
-    perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    perform guardar_parte(null, cab || '{"fecha":"2099-03-15","h_ext":0.3}', '[]');
+    perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
+    perform guardar_parte(null, cab || '{"fecha":"2099-03-15","operario":"T003","h_ext":0.3,"h_ext_manual":true}', '[]');
     reset role; res := res || to_jsonb('M15 h_ext = 0,3 (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('M15 h_ext = 0,3: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
-    perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    perform guardar_parte(null, cab || '{"fecha":"2099-03-16","h_ext":-1}', '[]');
+    perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
+    perform guardar_parte(null, cab || '{"fecha":"2099-03-16","operario":"T003","h_ext":-1,"h_ext_manual":true}', '[]');
     reset role; res := res || to_jsonb('M16 h_ext negativo (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('M16 h_ext negativo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
@@ -160,15 +163,24 @@ begin
     reset role; res := res || to_jsonb('M18 operario borra líneas directamente (esperado 0 filas): '||n);
   exception when others then res := res || to_jsonb('M18 borrado directo de líneas: bloqueado '||sqlstate||' '||sqlerrm); end;
 
+  -- M19: desde la 010 no hay escritura directa en partes_cab por la API (0 filas).
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
+    update partes_cab set h_sal = '09:00' where id_parte = id_m01; get diagnostics n = row_count;
+    reset role; res := res || to_jsonb('M19 acortar la jornada por la API (esperado 0 filas): '||n);
+  exception when others then res := res || to_jsonb('M19 acortar la jornada por la API: bloqueado '||sqlstate||' '||sqlerrm); end;
+
+  -- M19b: desde el SQL Editor (sin sesión) el UPDATE sí se aplica, pero la comprobación diferida
+  -- del parte completo lo rechaza al confirmar.
+  begin
+    perform set_config('request.jwt.claims','',true); reset role;
     update partes_cab set h_sal = '09:00' where id_parte = id_m01;   -- deja tareas fuera de la jornada
     set constraints all immediate;                                     -- fuerza la comprobación diferida
     set constraints all deferred;
-    reset role; res := res || to_jsonb('M19 acortar la jornada por la API dejando tareas fuera (esperado bloqueado): FALLO, se permitió'::text);
+    res := res || to_jsonb('M19b acortar la jornada desde SQL dejando tareas fuera (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then
     set constraints all deferred;
-    res := res || to_jsonb('M19 acortar la jornada por la API: bloqueado '||sqlstate||' '||sqlerrm);
+    res := res || to_jsonb('M19b acortar la jornada desde SQL: bloqueado '||sqlstate||' '||sqlerrm);
   end;
 
   begin

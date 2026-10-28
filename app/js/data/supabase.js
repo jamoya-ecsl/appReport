@@ -1,4 +1,4 @@
-// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 010).
+// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 011).
 // Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS y los disparadores.
 // Login: email + contraseña o enlace mágico (Supabase Auth). El email debe existir en public.operarios y estar activo.
 
@@ -115,7 +115,8 @@ export function createSupabaseApi(cfg) {
     // RLS filtra por rol; aquí solo se aplican los filtros de pantalla.
     // Filtro por finca: partes con alguna tarea en esa finca (la cabecera ya no tiene finca).
     async listPartes(f = {}) {
-      const select = f.finca ? '*, lineas:partes_det(finca), filtro:partes_det!inner(finca)' : '*, lineas:partes_det(finca)';
+      // ht_tareas: horas de tareas sin MOTIVOS PERSONALES, calculadas por la BD al consultar (migración 011).
+      const select = f.finca ? '*, ht_tareas, lineas:partes_det(finca), filtro:partes_det!inner(finca)' : '*, ht_tareas, lineas:partes_det(finca)';
       let q = sb.from('partes_cab').select(select)
         .order('fecha', { ascending: false }).order('num_parte', { ascending: false });
       if (f.estado) q = q.eq('estado', f.estado);
@@ -127,13 +128,20 @@ export function createSupabaseApi(cfg) {
     },
 
     async getParte(id) {
-      const r = ok(await sb.from('partes_cab').select('*, partes_det(*)').eq('id_parte', id).maybeSingle());
+      const r = ok(await sb.from('partes_cab').select('*, ht_tareas, partes_det(*)').eq('id_parte', id).maybeSingle());
       if (!r) throw new Error('Parte no encontrado o sin permiso para verlo.');
       return { ...normParte(r), lineas: (r.partes_det || []).map(normLinea).sort((a, b) => a.h_ini.localeCompare(b.h_ini)) };
     },
 
+    // th_jornada (migración 011). Solo el ADMIN ve la configuración; para el resto devuelve null.
+    async getThJornada() {
+      const r = ok(await sb.from('configuracion').select('valor').eq('clave', 'th_jornada').maybeSingle());
+      return r ? Number(r.valor) : null;
+    },
+
     // Única vía de escritura de partes y líneas: guardar_parte() (migración 009).
-    // La BD valida el parte completo (jornada, solapes, desplazamientos, 15 minutos).
+    // La BD valida el parte completo (jornada, solapes, desplazamientos, 15 minutos) y calcula h_ext
+    // (solo respeta h_ext / h_ext_manual si los envía un ADMIN; migración 011).
     async saveParte({ id_parte, cab, lineas }) {
       return ok(await sb.rpc('guardar_parte', {
         p_id_parte: id_parte || null,

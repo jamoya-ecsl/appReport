@@ -19,6 +19,7 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `009_lineas_y_validaciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); verificada 30/30 con `pruebas/pruebas_modulo1.sql` | Módulo 1: tipos DESPLAZAMIENTO / MOTIVOS PERSONALES (TD001, TP001), cabecera sin finca/vehículo/tiempo, 15 min, `validar_parte()`, líneas solo vía `guardar_parte()` |
 | `010a_estado_cerrado.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial) | Añade el estado `Cerrado` |
 | `010_estados_y_funciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 32/32 con `pruebas/pruebas_modulo2.sql` | Módulo 2: Pendiente → Cerrado → Aprobado/Rechazado sin vuelta atrás; `cerrar_parte()`, `revisar_parte()`, `borrar_parte()`; sin escritura directa en `partes_cab` |
+| `011_configuracion_y_horas_extra.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 19/19 con `pruebas/pruebas_modulo3.sql` | Módulo 3: tabla `configuracion` (`th_jornada` = 8, solo ADMIN), `h_ext` calculado por la BD (corrección manual solo ADMIN), `ht_tareas` al consultar |
 
 El conector de Supabase usado desde Claude Code bloquea las sentencias con `DELETE`/`DROP`/`UPDATE`;
 por eso 004b y 007b se ejecutaron en Dashboard → SQL Editor. Lo ejecutado desde el SQL Editor no queda en
@@ -96,5 +97,8 @@ ese error muestra los resultados y deshace todos los cambios (solo puede saltar 
 Repetirlo después de cada migración. El conector de Claude Code no puede ejecutarlo porque contiene `UPDATE`/`DELETE`.
 Desde el 28/10 el script está adaptado a la migración 009 (cabecera sin finca, líneas que empiezan con DESPLAZAMIENTO):
 ejecutarlo solo con la 009 aplicada. Las reglas del módulo 1 se prueban en `pruebas/pruebas_modulo1.sql`
-(30/30 el 28/10 tras aplicar la 009) y las del módulo 2 en `pruebas/pruebas_modulo2.sql` (32/32 el 28/10).
-`pruebas_por_rol.sql`: 31/31 con la 009 y 32/32 con la 010 (28/10).
+(30/30 el 28/10 tras aplicar la 009), las del módulo 2 en `pruebas/pruebas_modulo2.sql` (32/32 el 28/10)
+y las del módulo 3 en `pruebas/pruebas_modulo3.sql` (19/19 el 28/10).
+`pruebas_por_rol.sql`: 31/31 con la 009 y 32/32 con la 010 y con la 011 (28/10).
+`pruebas_modulo1.sql` con la 011: 29/30; M19 había quedado anticuada por la 010 (el UPDATE directo ya afecta a 0 filas)
+y se ha reescrito como M19 (API, 0 filas) + M19b (SQL Editor, bloqueado). Pendiente repetirla.
