@@ -1,6 +1,6 @@
-// MODO SUPABASE — usa las tablas de supabase/propuesta/001_esquema_partes_trabajo.sql.
-// Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS del esquema.
-// Login: enlace mágico por email (Supabase Auth). El email debe existir en public.operarios y estar activo.
+// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 007b).
+// Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS y los disparadores.
+// Login: email + contraseña o enlace mágico (Supabase Auth). El email debe existir en public.operarios y estar activo.
 
 const intervalAMin = (v) => {
   if (!v) return 0;
@@ -13,8 +13,8 @@ function traducir(error) {
   const c = error?.code;
   const e = new Error(error?.message || 'Error desconocido de Supabase');
   if (c === 'PGRST205' || c === '42P01') {
-    e.message = 'Las tablas de la app no existen todavía en Supabase.';
-    e.hint = 'Hay que aplicar supabase/propuesta/001_esquema_partes_trabajo.sql (pendiente de autorización). Mientras tanto, usa el modo demo.';
+    e.message = 'No se encuentran las tablas de la app en este proyecto de Supabase.';
+    e.hint = 'Comprueba que SUPABASE_URL apunta al proyecto correcto (baluwelboftnibtyjrer), donde el esquema ya está aplicado. Mientras tanto, usa el modo demo.';
   } else if (c === '23505') e.message = 'Ya existe un parte de este operario para esa fecha (un parte por día).';
   else if (c === '23514') e.message = 'Datos no válidos: revisa las horas o, si rechazas, el comentario.';
   else if (c === '42501') e.message = 'No tienes permiso para esta operación.';
@@ -115,8 +115,8 @@ export function createSupabaseApi(cfg) {
       return { ...normParte(r), lineas: (r.partes_det || []).map(normLinea) };
     },
 
-    // Guardado atómico con la función guardar_parte() (migración 007b). Si aún no está aplicada,
-    // se usa el método antiguo en varios pasos.
+    // Guardado atómico con la función guardar_parte() (migración 007b, ya aplicada). El método en
+    // varios pasos de abajo solo se usa si la función no existe (p. ej. un proyecto sin la 007b).
     async saveParte({ id_parte, cab, lineas }) {
       const rpc = await sb.rpc('guardar_parte', {
         p_id_parte: id_parte || null,

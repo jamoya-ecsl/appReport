@@ -140,7 +140,11 @@ export function createMockApi(reason) {
       let p;
       if (id_parte) {
         p = db.partes.find((x) => x.id_parte === id_parte);
-        if (!p || !visible(p) || !puedeEditar(u, p)) throw new Error('No tienes permiso para editar este parte.');
+        if (!p || !visible(p) || !puedeEditar(u, p)) {
+          throw new Error(u.rol_app === 'SUPERVISOR'
+            ? 'Un supervisor solo puede aprobar o rechazar el parte, no modificar su contenido'
+            : 'No tienes permiso para editar este parte.');
+        }
       } else if (cab.operario !== u.cod_ope && u.rol_app !== 'ADMIN') {
         throw new Error('Solo un ADMIN puede crear partes de otro operario.');
       }

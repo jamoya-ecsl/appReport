@@ -14,6 +14,7 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `006_auditoria.sql` | Aplicada 22/10 | Tabla `auditoria` rellenada por disparador |
 | `007_funciones_app.sql` | Aplicada 22/10 | `panel_resumen()`, `operarios_sin_parte()` |
 | `007b_guardar_parte.sql` | Aplicada 22/10 desde el SQL Editor (no figura en el historial) | `guardar_parte()`: guardado atómico de parte + líneas |
+| `008_supervisor_sin_autorrevision.sql` | Aplicada y verificada 28/10 (31/31 casos) | El supervisor no toca líneas de ningún parte (salvo al crear el suyo) ni aprueba/rechaza sus propios partes |
 
 El conector de Supabase usado desde Claude Code bloquea las sentencias con `DELETE`/`DROP`/`UPDATE`;
 por eso 004b y 007b se ejecutaron en Dashboard → SQL Editor. Lo ejecutado desde el SQL Editor no queda en
@@ -22,21 +23,27 @@ el historial de migraciones: los archivos de esta carpeta son el registro.
 Verificado 22/10/2026: T000, T001 y T003 enlazados por id (T002 sin cuenta de login); `guardar_parte()`
 probada (crear, editar conservando líneas, rechazo atómico ante error, tarea de baja, supervisor bloqueado).
 
-## Permisos por rol (RLS, probado 22/10/2026 con 21 casos)
+## Permisos por rol (RLS + disparadores)
+Probado 22/10/2026 con 21 casos y 28/10/2026 con 31 casos (`pruebas/pruebas_por_rol.sql`).
+El 28/10 cumplieron 28 de 31: fallaron S08, S10 y S11 (supervisor sobre sus propios partes).
+La migración 008 (aplicada 28/10) los corrige: repetidas las pruebas tras aplicarla, cumplen 31 de 31.
+La tabla describe el comportamiento actual.
+
 | | ADMIN | SUPERVISOR | OPERARIO | Sin sesión |
 |---|---|---|---|---|
 | Catálogos (`fincas`, `parcelas`, `tareas`, `vehiculos`, `aperos`) | Todo, incluido borrar | Leer, crear, editar, dar de baja | Leer | Nada |
 | `operarios` (usuarios) | Todo, incluido borrar | Solo su ficha | Solo su ficha | Nada |
 | `operarios_nombres()` | Todos | Todos (código y nombre) | El suyo | — |
-| `partes_cab` | Todo, incluido borrar | Leer todos; solo aprobar/rechazar | Crear y leer los suyos; editar en Pendiente | Nada |
-| `partes_det` | Todo | Leer | Los de sus partes en Pendiente | Nada |
+| `partes_cab` | Todo, incluido borrar | Leer todos; crear los suyos (en Pendiente); aprobar/rechazar solo los de otros | Crear y leer los suyos; editar en Pendiente | Nada |
+| `partes_det` | Todo | Leer; añadir líneas solo al crear su propio parte | Los de sus partes en Pendiente | Nada |
 | `partes_mant` | Todo | Leer, crear, editar | Los suyos | Nada |
 | `auditoria` | Leer | Leer (sin `operarios`) | Nada | Nada |
 
 Reglas que impone la BD (no solo la interfaz):
 - Nunca queda la app sin un ADMIN activo.
 - Un operario no puede aprobar/rechazar ni crear partes a nombre de otro.
-- Un supervisor no puede cambiar el contenido de un parte; rechazar exige comentario.
+- Un supervisor no puede cambiar el contenido de un parte, ni cabecera ni líneas, tampoco de los suyos; rechazar exige comentario.
+- Un supervisor no aprueba ni rechaza sus propios partes ni los crea ya revisados; los revisa un ADMIN.
 - Un parte por operario y día; salida > entrada; la parcela debe ser de su finca.
 - Un registro dado de baja no se puede usar en partes nuevos (los antiguos lo conservan).
 - `creado_por`, fechas de creación, `supervisor_revisa`, `fecha_revision`, `fecha_baja`, `baja_por` los fija la BD.
@@ -57,8 +64,8 @@ Reglas que impone la BD (no solo la interfaz):
 
 ## Pendiente (Dashboard, lo hace el usuario)
 1. (Hecho) SQL Editor: `004b` y `007b`.
-2. Authentication → Sign In / Providers: desactivar "Allow new users to sign up" (las cuentas las crea el ADMIN).
-3. Authentication → Passwords: activar la protección de contraseñas filtradas (aviso de Supabase).
+2. (Hecho, comprobado 28/10) Registro libre desactivado: las cuentas las crea el ADMIN.
+3. Authentication → Passwords: activar la protección de contraseñas filtradas (sigue desactivada el 28/10).
 4. Alta de usuarios: Authentication → Users → Add user (email = `operarios.email`, Auto Confirm) y fila en `operarios`.
    El enlace por id se hace solo. Una Edge Function para que el ADMIN dé de alta desde la app queda para más adelante.
 5. Storage: bucket privado `fotos-partes` (campo `foto` de `partes_cab`), cuando se haga esa función.
@@ -68,3 +75,9 @@ Reglas que impone la BD (no solo la interfaz):
 npm install
 npm run check:supabase
 ```
+
+## Probar permisos y reglas por rol
+`pruebas/pruebas_por_rol.sql`: pegarlo en Dashboard → SQL Editor → Run. Simula T003 (OPERARIO), T001
+(SUPERVISOR) y T000 (ADMIN) con 31 casos. Termina con un error `RESULTADOS(rollback) [...]` a propósito:
+ese error muestra los resultados y deshace todos los cambios (solo puede saltar la numeración de `num_parte`).
+Repetirlo después de cada migración. El conector de Claude Code no puede ejecutarlo porque contiene `UPDATE`/`DELETE`.

@@ -2,7 +2,7 @@
 //   #/login · #/inicio · #/partes?filtros · #/partes/nuevo · #/partes/:id · #/partes/:id/editar
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
-import { ESTADOS, esGestor, puedeEditar, puedeRevisar, calcHoras, calcTotHoras, validarParte } from './rules.js';
+import { ESTADOS, esGestor, puedeEditar, motivoNoEditable, puedeRevisar, calcHoras, calcTotHoras, validarParte } from './rules.js';
 
 const root = document.getElementById('app');
 const st = { api: null, user: null, cat: null, operarios: [] };
@@ -311,7 +311,7 @@ async function viewForm(id) {
   if (id) {
     try { p = await st.api.getParte(id); } catch (e) { return showError(main, e, () => viewForm(id)); }
     if (!puedeEditar(u, p)) {
-      main.innerHTML = errorHtml(new Error(`Este parte está "${p.estado}" y ya no lo puedes editar.`), {
+      main.innerHTML = errorHtml(new Error(motivoNoEditable(u, p)), {
         retry: false, extra: `<a class="button secondary" href="#/partes/${esc(id)}">Ver parte</a>`,
       });
       return;

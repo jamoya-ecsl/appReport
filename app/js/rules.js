@@ -6,11 +6,20 @@ export const ESTADOS = ['Pendiente', 'Aprobado', 'Rechazado'];
 
 export const esGestor = (u) => !!u && (u.rol_app === 'ADMIN' || u.rol_app === 'SUPERVISOR');
 
-// OPERARIO: solo sus partes y solo en "Pendiente". ADMIN/SUPERVISOR: cualquiera.
+// ADMIN: cualquier parte. OPERARIO: solo los suyos y solo en "Pendiente".
+// SUPERVISOR: ninguno, ni siquiera los suyos; solo aprueba o rechaza
+// (igual que el disparador tg_partes_cab_supervisor_solo_revision de la BD).
 export const puedeEditar = (u, p) =>
-  esGestor(u) || (p.operario === u.cod_ope && p.estado === 'Pendiente');
+  u?.rol_app === 'ADMIN' || (u?.rol_app === 'OPERARIO' && p.operario === u.cod_ope && p.estado === 'Pendiente');
 
-export const puedeRevisar = (u, p) => esGestor(u) && p.estado === 'Pendiente';
+export const motivoNoEditable = (u, p) =>
+  u?.rol_app === 'SUPERVISOR'
+    ? 'Como supervisor solo puedes aprobar o rechazar partes, no modificar su contenido.'
+    : `Este parte está "${p.estado}" y ya no lo puedes editar.`;
+
+// Gestores revisan partes en "Pendiente", pero un SUPERVISOR no revisa los suyos (los revisa un ADMIN).
+export const puedeRevisar = (u, p) =>
+  esGestor(u) && p.estado === 'Pendiente' && !(u.rol_app === 'SUPERVISOR' && p.operario === u.cod_ope);
 
 const aMin = (t) => {
   if (!t) return null;

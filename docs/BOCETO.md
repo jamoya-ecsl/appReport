@@ -15,7 +15,7 @@ npm run dev          → http://localhost:5180
 | Fuente | Qué aporta |
 |---|---|
 | `Diseno_App_Partes_Trabajo_AppSheet.md` | Roles, campos, reglas de edición, vistas |
-| `supabase/propuesta/001_esquema_partes_trabajo.sql` | Nombres de tablas/columnas y RLS que usa el modo Supabase |
+| `supabase/propuesta/` (001 a 007b, ya aplicadas) | Tablas, RLS, disparadores y funciones que usa el modo Supabase (ver `supabase/README.md`) |
 | `PT_EC.xlsx`, `BBDD_Corregida_AppSheet.xlsx` | Estructura de los catálogos (el boceto **no** usa sus datos) |
 
 ## Pantallas y navegación
@@ -26,17 +26,19 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 ```
 | Pantalla | Ruta | Quién | Qué hace |
 |---|---|---|---|
-| Login | `#/login` | Todos | Demo: elegir usuario ficticio. Supabase: enlace mágico por email |
+| Login | `#/login` | Todos | Demo: elegir usuario ficticio. Supabase: email + contraseña o enlace mágico |
 | Inicio | `#/inicio` | Todos | Contadores por estado, aviso de pendientes (gestor) o rechazados (operario), últimos 5 partes |
 | Lista | `#/partes` | Todos | "Mis partes" (operario) / "Todos los partes" (supervisor/admin). Filtros: estado, operario, finca, fechas |
 | Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, revisión. Aprobar/Rechazar (gestor, si está Pendiente) |
-| Nuevo / Editar | `#/partes/nuevo`, `#/partes/:id/editar` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
+| Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
+| Editar | `#/partes/:id/editar` | ADMIN; OPERARIO (suyos, en Pendiente) | Mismo formulario. El supervisor no tiene acceso |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
 
-## Reglas implementadas (mismas que el SQL propuesto)
+## Reglas implementadas (mismas que la base de datos)
 - OPERARIO: ve y crea solo sus partes; edita solo en `Pendiente`.
-- SUPERVISOR y ADMIN: ven todos; pueden editar y aprobar/rechazar.
+- SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); solo aprueba o rechaza los de **otros**. Sus partes los revisa un ADMIN.
+- ADMIN: ve todos, edita cualquiera y aprueba/rechaza.
 - Solo ADMIN puede crear un parte a nombre de otro operario.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
@@ -47,7 +49,7 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 | Campo `TIEMPO` | **No se muestra**: su significado sigue sin confirmar en el diseño |
 | Parte rechazado | El operario no puede editarlo (así lo dice el diseño). Falta decidir cómo se corrige: ¿lo edita el supervisor, o vuelve a `Pendiente`? |
 | Login en Supabase | Email + contraseña (cuentas creadas en el Dashboard) y, como alternativa, enlace mágico. El diseño original hablaba de Google |
-| Guardado de cabecera + líneas | Dos llamadas seguidas (no atómico). En producción, una función RPC en una transacción |
+| Guardado de cabecera + líneas | Una sola llamada a la función `guardar_parte()` (atómica, migración 007b). Solo si no existiera, el boceto recurre al método antiguo en varios pasos |
 | Almuerzo / comida | Se piden en minutos y se guardan como `interval` |
 
 ## Fuera de alcance (existe en el diseño, no en el boceto)
@@ -67,6 +69,6 @@ Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admi
 
 ## Qué llevar a Lovable
 - **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `setEstado`) y los mensajes de error de `supabase.js`.
-- **Ajustar**: login (Google o email según decidáis), el formulario para usarlo desde el móvil en el campo, y el guardado atómico con una RPC.
+- **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
 - **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.
