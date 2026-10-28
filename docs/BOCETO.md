@@ -27,18 +27,20 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Pantalla | Ruta | Quién | Qué hace |
 |---|---|---|---|
 | Login | `#/login` | Todos | Demo: elegir usuario ficticio. Supabase: email + contraseña o enlace mágico |
-| Inicio | `#/inicio` | Todos | Contadores por estado, aviso de pendientes (gestor) o rechazados (operario), últimos 5 partes |
+| Inicio | `#/inicio` | Todos | Contadores por estado, aviso de cerrados por revisar (gestor) o de partes sin cerrar y rechazados (operario), últimos 5 partes |
 | Lista | `#/partes` | Todos | "Mis partes" (operario) / "Todos los partes" (supervisor/admin). Filtros: estado, operario, finca, fechas |
-| Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, revisión. Aprobar/Rechazar (gestor, si está Pendiente) |
+| Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, cierre y revisión. Cerrar (si está Pendiente), Aprobar/Rechazar (gestor, si está Cerrado), Borrar (ADMIN) |
 | Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
 | Editar | `#/partes/:id/editar` | ADMIN; OPERARIO (suyos, en Pendiente) | Mismo formulario. El supervisor no tiene acceso |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
 
 ## Reglas implementadas (mismas que la base de datos)
-- OPERARIO: ve y crea solo sus partes; edita solo en `Pendiente`.
-- SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); solo aprueba o rechaza los de **otros**. Sus partes los revisa un ADMIN.
-- ADMIN: ve todos, edita cualquiera y aprueba/rechaza.
+- Estados (migración 010): `Pendiente → Cerrado → Aprobado | Rechazado`. Nadie reabre un parte; Aprobado y Rechazado son finales.
+- OPERARIO: ve y crea solo sus partes; edita solo en `Pendiente`; cierra los suyos.
+- SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); cierra cualquiera y solo aprueba o rechaza los **Cerrados de otros**. Sus partes los revisa un ADMIN.
+- ADMIN: ve todos, edita cualquiera en cualquier estado (sigue en su estado), cierra, aprueba/rechaza y borra (con copia en auditoría).
+- Cerrar exige un parte válido y, si no es de mantenimiento en nave, al menos una tarea.
 - Solo ADMIN puede crear un parte a nombre de otro operario.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
@@ -47,7 +49,7 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 | Tema | Decisión del boceto |
 |---|---|
 | Campo `TIEMPO` | **No se muestra**: su significado sigue sin confirmar en el diseño |
-| Parte rechazado | El operario no puede editarlo (así lo dice el diseño). Falta decidir cómo se corrige: ¿lo edita el supervisor, o vuelve a `Pendiente`? |
+| Parte rechazado | Decidido 28/10: solo lo corrige el ADMIN y sigue en `Rechazado` (no vuelve a `Pendiente`) |
 | Login en Supabase | Email + contraseña (cuentas creadas en el Dashboard) y, como alternativa, enlace mágico. El diseño original hablaba de Google |
 | Guardado de cabecera + líneas | Una sola llamada a la función `guardar_parte()` (atómica, migración 007b). Solo si no existiera, el boceto recurre al método antiguo en varios pasos |
 | Almuerzo / comida | Se piden en minutos y se guardan como `interval` |
@@ -68,7 +70,7 @@ Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admi
 | `scripts/serve.mjs` | Servidor local sin dependencias; no envía nunca claves secretas al navegador |
 
 ## Qué llevar a Lovable
-- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `setEstado`) y los mensajes de error de `supabase.js`.
+- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`) y los mensajes de error de `supabase.js`.
 - **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
 - **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.

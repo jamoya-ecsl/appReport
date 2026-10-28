@@ -3,7 +3,8 @@
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
 import {
-  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable, puedeRevisar,
+  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable,
+  puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
 } from './rules.js';
 
@@ -172,7 +173,8 @@ async function viewInicio() {
       <div class="kpis">
         ${ESTADOS.map((e) => `<a class="kpi kpi-${e.toLowerCase()}" href="#/partes?estado=${e}"><span>${e}</span><strong>${n(e)}</strong></a>`).join('')}
       </div>
-      ${esGestor(u) && n('Pendiente') ? `<div class="state state-info">Hay <strong>${n('Pendiente')}</strong> parte(s) pendientes de revisión. <a href="#/partes?estado=Pendiente">Revisar ahora</a></div>` : ''}
+      ${esGestor(u) && n('Cerrado') ? `<div class="state state-info">Hay <strong>${n('Cerrado')}</strong> parte(s) cerrados pendientes de revisión. <a href="#/partes?estado=Cerrado">Revisar ahora</a></div>` : ''}
+      ${!esGestor(u) && n('Pendiente') ? `<div class="state state-info">Tienes <strong>${n('Pendiente')}</strong> parte(s) sin cerrar. Ciérralos cuando estén completos para que los revisen. <a href="#/partes?estado=Pendiente">Ver</a></div>` : ''}
       ${!esGestor(u) && n('Rechazado') ? `<div class="state state-info">Tienes <strong>${n('Rechazado')}</strong> parte(s) rechazados. <a href="#/partes?estado=Rechazado">Ver motivo</a></div>` : ''}
       <h2>Últimos partes</h2>
       ${tablaPartes(partes.slice(0, 5))}`;
@@ -244,8 +246,14 @@ async function viewDetalle(id) {
     <a class="link" href="#/partes">← Volver a la lista</a>
     <div class="page-head">
       <h1>Parte nº ${esc(p.num_parte)} ${badge(p.estado)}</h1>
-      ${puedeEditar(u, p) ? `<a class="button secondary" href="#/partes/${esc(p.id_parte)}/editar">Editar</a>` : ''}
+      <div class="row">
+        ${puedeEditar(u, p) ? `<a class="button secondary" href="#/partes/${esc(p.id_parte)}/editar">Editar</a>` : ''}
+        ${puedeCerrar(u, p) ? '<button type="button" id="b-cerrar">Cerrar parte</button>' : ''}
+        ${puedeBorrar(u) ? '<button type="button" class="danger" id="b-borrar">Borrar</button>' : ''}
+      </div>
     </div>
+    <div id="acc-msg"></div>
+    ${p.estado === 'Pendiente' && puedeCerrar(u, p) ? `<div class="state state-info">Cuando el parte esté completo, ciérralo para que lo revisen. <strong>Una vez cerrado ya no se puede reabrir</strong>${u.rol_app === 'ADMIN' ? '' : ' ni editar'}.</div>` : ''}
     ${p.estado === 'Rechazado' && p.comentario_supervisor ? `<div class="state state-error"><strong>Motivo del rechazo:</strong> ${esc(p.comentario_supervisor)}</div>` : ''}
     <section class="card"><h2>Jornada</h2><dl class="grid">
       ${campo('Operario', esc(nombreOperario(p.operario)))}
@@ -266,7 +274,9 @@ async function viewDetalle(id) {
           <td>${esc(l.h_ini)}–${esc(l.h_fin)}</td><td>${fmtHoras(l.t_horas ?? calcHoras(l.h_ini, l.h_fin))}</td><td>${esc(l.obs || '')}</td></tr>`).join('')}
         </tbody></table></div>` : emptyHtml('Este parte no tiene líneas de tarea.')}
     </section>
-    <section class="card"><h2>Revisión</h2><dl class="grid">
+    <section class="card"><h2>Cierre y revisión</h2><dl class="grid">
+      ${campo('Cerrado por', esc(p.cerrado_por ? nombreOperario(p.cerrado_por) : '—'))}
+      ${campo('Fecha cierre', fmtFechaHora(p.fecha_cierre))}
       ${campo('Revisado por', esc(p.supervisor_revisa ? nombreOperario(p.supervisor_revisa) : '—'))}
       ${campo('Fecha revisión', fmtFechaHora(p.fecha_revision))}
       ${campo('Creado', `${fmtFechaHora(p.fch_creacion)} · ${esc(p.creado_por || '')}`)}
@@ -282,7 +292,39 @@ async function viewDetalle(id) {
         </div>
         <div id="rev-msg"></div>
       </form>` : ''}
+    ${esGestor(u) && p.estado === 'Pendiente' ? '<p class="muted">Para aprobar o rechazar, el parte tiene que estar cerrado.</p>' : ''}
+    ${u.rol_app === 'SUPERVISOR' && p.estado === 'Cerrado' && p.operario === u.cod_ope ? '<p class="muted">Tus propios partes los revisa un ADMIN.</p>' : ''}
     </section>`;
+
+  const accMsg = main.querySelector('#acc-msg');
+  main.querySelector('#b-cerrar')?.addEventListener('click', async (ev) => {
+    const err = errorCierre(p, p.lineas.length);
+    if (err) { accMsg.innerHTML = errorHtml(new Error(err), { retry: false }); return; }
+    const b = ev.currentTarget;
+    if (!confirm(`¿Cerrar el parte nº ${p.num_parte}? Después no se podrá reabrir${u.rol_app === 'ADMIN' ? '' : ' ni editar'}.`)) return;
+    b.disabled = true;
+    try {
+      await st.api.cerrarParte(p.id_parte);
+      toast(`Parte nº ${p.num_parte} cerrado.`);
+      viewDetalle(id);
+    } catch (e) {
+      accMsg.innerHTML = errorHtml(e, { retry: false });
+      b.disabled = false;
+    }
+  });
+  main.querySelector('#b-borrar')?.addEventListener('click', async (ev) => {
+    const b = ev.currentTarget;
+    if (!confirm(`¿Borrar definitivamente el parte nº ${p.num_parte} (${p.estado}) y sus ${p.lineas.length} tarea(s)? Quedará una copia en la auditoría.`)) return;
+    b.disabled = true;
+    try {
+      await st.api.borrarParte(p.id_parte);
+      toast(`Parte nº ${p.num_parte} borrado.`);
+      location.hash = '#/partes';
+    } catch (e) {
+      accMsg.innerHTML = errorHtml(e, { retry: false });
+      b.disabled = false;
+    }
+  });
 
   main.querySelectorAll('#f-revision [data-estado]').forEach((b) => b.addEventListener('click', async () => {
     const estado = b.dataset.estado;
@@ -294,7 +336,7 @@ async function viewDetalle(id) {
     }
     main.querySelectorAll('#f-revision button').forEach((x) => { x.disabled = true; });
     try {
-      await st.api.setEstado(p.id_parte, estado, comentario);
+      await st.api.revisarParte(p.id_parte, estado, comentario);
       toast(`Parte nº ${p.num_parte} ${estado.toLowerCase()}.`);
       viewDetalle(id);
     } catch (e) {

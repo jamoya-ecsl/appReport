@@ -1,28 +1,41 @@
 // Reglas de negocio compartidas por los dos modos (demo y Supabase).
-// En Supabase las mismas reglas las impone la BD (constraints, triggers, RLS y validar_parte()
-// de la migración 009); aquí solo sirven para avisar antes de enviar.
+// En Supabase las mismas reglas las impone la BD (constraints, triggers, RLS, validar_parte()
+// de la 009 y cerrar_parte()/revisar_parte()/borrar_parte() de la 010); aquí solo sirven para
+// avisar antes de enviar y para mostrar u ocultar botones.
 
-export const ESTADOS = ['Pendiente', 'Aprobado', 'Rechazado'];
+// Ciclo de vida (010): Pendiente → Cerrado → Aprobado | Rechazado. Sin vuelta atrás.
+export const ESTADOS = ['Pendiente', 'Cerrado', 'Aprobado', 'Rechazado'];
 
 export const TIPO_DESPLAZAMIENTO = 'DESPLAZAMIENTO';
 export const TIPO_PERSONAL = 'MOTIVOS PERSONALES';
 
 export const esGestor = (u) => !!u && (u.rol_app === 'ADMIN' || u.rol_app === 'SUPERVISOR');
 
-// ADMIN: cualquier parte. OPERARIO: solo los suyos y solo en "Pendiente".
-// SUPERVISOR: ninguno, ni siquiera los suyos; solo aprueba o rechaza
-// (igual que el disparador tg_partes_cab_supervisor_solo_revision de la BD).
+// ADMIN: cualquier parte, en cualquier estado (sigue en su estado). OPERARIO: solo los suyos y solo
+// en "Pendiente". SUPERVISOR: ninguno, ni siquiera los suyos; solo cierra, aprueba o rechaza
+// (igual que los disparadores de la BD).
 export const puedeEditar = (u, p) =>
   u?.rol_app === 'ADMIN' || (u?.rol_app === 'OPERARIO' && p.operario === u.cod_ope && p.estado === 'Pendiente');
 
 export const motivoNoEditable = (u, p) =>
   u?.rol_app === 'SUPERVISOR'
-    ? 'Como supervisor solo puedes aprobar o rechazar partes, no modificar su contenido.'
+    ? 'Como supervisor solo puedes cerrar, aprobar o rechazar partes, no modificar su contenido.'
     : `Este parte está "${p.estado}" y ya no lo puedes editar.`;
 
-// Gestores revisan partes en "Pendiente", pero un SUPERVISOR no revisa los suyos (los revisa un ADMIN).
+// Cerrar (Pendiente → Cerrado): el OPERARIO los suyos; SUPERVISOR y ADMIN cualquiera.
+export const puedeCerrar = (u, p) =>
+  p.estado === 'Pendiente' && (esGestor(u) || (u?.rol_app === 'OPERARIO' && p.operario === u.cod_ope));
+
+// Revisar (Cerrado → Aprobado | Rechazado): gestores, pero un SUPERVISOR no revisa los suyos.
 export const puedeRevisar = (u, p) =>
-  esGestor(u) && p.estado === 'Pendiente' && !(u.rol_app === 'SUPERVISOR' && p.operario === u.cod_ope);
+  esGestor(u) && p.estado === 'Cerrado' && !(u.rol_app === 'SUPERVISOR' && p.operario === u.cod_ope);
+
+// Borrar: solo ADMIN, en cualquier estado.
+export const puedeBorrar = (u) => u?.rol_app === 'ADMIN';
+
+// Igual que el disparador tg_partes_cab_estado al cerrar.
+export const errorCierre = (p, nLineas) =>
+  !p.mat_nave && !nLineas ? 'Para cerrar un parte sin mantenimiento en nave hace falta al menos una tarea' : null;
 
 const aMin = (t) => {
   if (!t) return null;

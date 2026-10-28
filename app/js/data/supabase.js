@@ -1,4 +1,4 @@
-// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 009).
+// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 010).
 // Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS y los disparadores.
 // Login: email + contraseña o enlace mágico (Supabase Auth). El email debe existir en public.operarios y estar activo.
 
@@ -24,8 +24,8 @@ function traducir(error) {
     else if (/horas_ok/.test(m)) e.message = 'La hora de fin debe ser posterior a la de inicio.';
     else e.message = 'Datos no válidos: revisa las horas o, si rechazas, el comentario.';
   } else if (c === 'PGRST202') {
-    e.message = 'Falta la función guardar_parte() en Supabase.';
-    e.hint = 'Hay que aplicar las migraciones 007b y 009.';
+    e.message = 'Falta una función de la app en Supabase (guardar_parte, cerrar_parte, revisar_parte o borrar_parte).';
+    e.hint = 'Hay que aplicar las migraciones 009, 010a y 010.';
   }
   else if (c === '42501') e.message = 'No tienes permiso para esta operación.';
   else if (c === 'PGRST116') e.message = 'Parte no encontrado o sin permiso.';
@@ -142,10 +142,16 @@ export function createSupabaseApi(cfg) {
       }));
     },
 
-    // El trigger tg_partes_cab_guardas sella supervisor_revisa y fecha_revision.
-    async setEstado(id, estado, comentario) {
-      ok(await sb.from('partes_cab').update({ estado, comentario_supervisor: comentario?.trim() || null })
-        .eq('id_parte', id).select('id_parte').single());
+    // Cambios de estado y borrado solo mediante funciones (migración 010).
+    // La BD sella quién y cuándo cierra (cerrado_por, fecha_cierre) y revisa (supervisor_revisa, fecha_revision).
+    async cerrarParte(id) {
+      ok(await sb.rpc('cerrar_parte', { p_id_parte: id }));
+    },
+    async revisarParte(id, estado, comentario) {
+      ok(await sb.rpc('revisar_parte', { p_id_parte: id, p_estado: estado, p_comentario: comentario?.trim() || null }));
+    },
+    async borrarParte(id) {
+      ok(await sb.rpc('borrar_parte', { p_id_parte: id }));
     },
   };
 }

@@ -2,9 +2,12 @@
 // No proceden de BBDD.xlsx ni de PT_EC.xlsx; solo imitan su estructura (códigos, campos, estados).
 // Se guardan en sessionStorage del navegador: se pierden al cerrar la pestaña.
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
-import { esGestor, puedeEditar, puedeRevisar, calcHoras, calcTotHoras, validarParte, ordenarLineas } from '../rules.js';
+import {
+  esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
+  calcHoras, calcTotHoras, validarParte, ordenarLineas,
+} from '../rules.js';
 
-const KEY = 'pt-demo-v2';  // v2: la cabecera ya no tiene finca ni vehículo (migración 009)
+const KEY = 'pt-demo-v3';  // v3: estado Cerrado y cerrado_por/fecha_cierre (migración 010)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -61,13 +64,16 @@ function semilla() {
     obs: '', estado,
     creado_por: OPERARIOS.find((o) => o.cod_ope === operario).email,
     fch_creacion: new Date().toISOString(), fch_modificacion: new Date().toISOString(),
-    supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null, ...extra,
+    supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null,
+    cerrado_por: null, fecha_cierre: null, ...extra,
   });
+  const ahora = new Date().toISOString();
+  const cerrado = (por) => ({ cerrado_por: por, fecha_cierre: ahora });
   const partes = [
-    cab(1, 'D002', -3, 'Aprobado', { supervisor_revisa: 'D001', fecha_revision: new Date().toISOString() }),
-    cab(2, 'D002', -2, 'Rechazado', { supervisor_revisa: 'D001', fecha_revision: new Date().toISOString(),
+    cab(1, 'D002', -3, 'Aprobado', { ...cerrado('D002'), supervisor_revisa: 'D001', fecha_revision: ahora }),
+    cab(2, 'D002', -2, 'Rechazado', { ...cerrado('D002'), supervisor_revisa: 'D001', fecha_revision: ahora,
       comentario_supervisor: 'Falta indicar la parcela en la línea de abonado (ficticio).' }),
-    cab(3, 'D002', -1, 'Pendiente'),
+    cab(3, 'D002', -1, 'Cerrado', cerrado('D002')),
     cab(4, 'D003', -1, 'Pendiente', { h_ent: '08:00', h_sal: '15:00', t_alm_min: 0 }),
   ];
   const L = (id, id_parte, tarea, finca, parcela, h_ini, h_fin, apero = null, vehiculo = 'DEMO-0001') =>
@@ -172,7 +178,7 @@ export function createMockApi(reason) {
       if (!id_parte) {
         db.seq += 1;
         p = { id_parte: `demo-${db.seq}`, num_parte: db.seq, estado: 'Pendiente', creado_por: u.email, fch_creacion: ahora,
-          supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null };
+          supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null, cerrado_por: null, fecha_cierre: null };
         db.partes.push(p);
       }
       const { operario: _ignorado, ...campos } = cab;
@@ -183,15 +189,47 @@ export function createMockApi(reason) {
       return p.id_parte;
     },
 
-    async setEstado(id, estado, comentario) {
+    // Mismas reglas que cerrar_parte(), revisar_parte() y borrar_parte() de la migración 010.
+    async cerrarParte(id) {
       exigirSesion();
       await wait(300);
       const u = yo();
       const p = db.partes.find((x) => x.id_parte === id);
-      if (!p || !puedeRevisar(u, p)) throw new Error('No tienes permiso para revisar este parte.');
-      if (estado === 'Rechazado' && !comentario?.trim()) throw new Error('Para rechazar hay que escribir un comentario.');
+      if (!p || !visible(p)) throw new Error('Parte no encontrado o sin permiso para cerrarlo');
+      if (p.estado !== 'Pendiente') throw new Error(`Solo se puede cerrar un parte Pendiente (este está ${p.estado})`);
+      if (!puedeCerrar(u, p)) throw new Error('Parte no encontrado o sin permiso para cerrarlo');
+      const errores = validarParte(p, lineasDe(id), CATALOGOS);
+      if (errores.length) throw new Error(errores[0]);
+      const e = errorCierre(p, lineasDe(id).length);
+      if (e) throw new Error(e);
+      const ahora = new Date().toISOString();
+      Object.assign(p, { estado: 'Cerrado', cerrado_por: u.cod_ope, fecha_cierre: ahora, fch_modificacion: ahora });
+      guardar();
+    },
+
+    async revisarParte(id, estado, comentario) {
+      exigirSesion();
+      await wait(300);
+      const u = yo();
+      const p = db.partes.find((x) => x.id_parte === id);
+      if (!esGestor(u)) throw new Error('Solo un SUPERVISOR o un ADMIN puede aprobar o rechazar partes');
+      if (!p) throw new Error('Parte no encontrado');
+      if (p.estado !== 'Cerrado') throw new Error(`Solo se puede aprobar o rechazar un parte Cerrado (este está ${p.estado})`);
+      if (!puedeRevisar(u, p)) throw new Error('Un supervisor no puede aprobar ni rechazar sus propios partes; debe revisarlos un ADMIN');
+      if (estado === 'Rechazado' && !comentario?.trim()) throw new Error('Para rechazar un parte hay que indicar el motivo en el comentario');
+      const ahora = new Date().toISOString();
       Object.assign(p, { estado, comentario_supervisor: comentario?.trim() || null, supervisor_revisa: u.cod_ope,
-        fecha_revision: new Date().toISOString(), fch_modificacion: new Date().toISOString() });
+        fecha_revision: ahora, fch_modificacion: ahora });
+      guardar();
+    },
+
+    async borrarParte(id) {
+      exigirSesion();
+      await wait(300);
+      if (!puedeBorrar(yo())) throw new Error('Solo un ADMIN puede borrar partes');
+      if (!db.partes.some((x) => x.id_parte === id)) throw new Error('Parte no encontrado');
+      db.partes = db.partes.filter((x) => x.id_parte !== id);
+      db.lineas = db.lineas.filter((l) => l.id_parte !== id);
       guardar();
     },
   };

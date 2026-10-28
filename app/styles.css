@@ -52,7 +52,7 @@ input[type=checkbox] { width: auto; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin-bottom: 1rem; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem; text-decoration: none; color: var(--text); display: grid; gap: .2rem; }
 .kpi strong { font-size: 1.8rem; }
-.kpi-pendiente { border-left: 4px solid #c99a00; } .kpi-aprobado { border-left: 4px solid var(--ok); } .kpi-rechazado { border-left: 4px solid var(--danger); }
+.kpi-pendiente { border-left: 4px solid #c99a00; } .kpi-cerrado { border-left: 4px solid #2f5fa8; } .kpi-aprobado { border-left: 4px solid var(--ok); } .kpi-rechazado { border-left: 4px solid var(--danger); }
 
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 table { border-collapse: collapse; width: 100%; font-size: .92rem; }
@@ -64,6 +64,7 @@ dt { font-size: .78rem; color: var(--muted); } dd { margin: .1rem 0 0; }
 
 .badge { font-size: .75rem; font-weight: 600; padding: .15rem .5rem; border-radius: 999px; }
 .badge-pendiente { background: var(--warn-bg); color: var(--warn); }
+.badge-cerrado { background: var(--info-bg); color: #2f5fa8; }
 .badge-aprobado { background: var(--ok-bg); color: var(--ok); }
 .badge-rechazado { background: var(--err-bg); color: var(--danger); }
 
