@@ -100,5 +100,5 @@ ejecutarlo solo con la 009 aplicada. Las reglas del módulo 1 se prueban en `pru
 (30/30 el 28/10 tras aplicar la 009), las del módulo 2 en `pruebas/pruebas_modulo2.sql` (32/32 el 28/10)
 y las del módulo 3 en `pruebas/pruebas_modulo3.sql` (19/19 el 28/10).
 `pruebas_por_rol.sql`: 31/31 con la 009 y 32/32 con la 010 y con la 011 (28/10).
-`pruebas_modulo1.sql` con la 011: 29/30; M19 había quedado anticuada por la 010 (el UPDATE directo ya afecta a 0 filas)
-y se ha reescrito como M19 (API, 0 filas) + M19b (SQL Editor, bloqueado). Pendiente repetirla.
+`pruebas_modulo1.sql` con la 011: 31/31 (M19 había quedado anticuada por la 010, porque el UPDATE directo ya afecta
+a 0 filas; se reescribió como M19 por la API, 0 filas, y M19b desde el SQL Editor, bloqueado por la validación del parte).
