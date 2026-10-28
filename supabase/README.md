@@ -29,6 +29,7 @@ probada (crear, editar conservando líneas, rechazo atómico ante error, tarea d
 Probado 22/10/2026 con 21 casos y 28/10/2026 con 31 casos (`pruebas/pruebas_por_rol.sql`).
 El 28/10 cumplieron 28 de 31: fallaron S08, S10 y S11 (supervisor sobre sus propios partes).
 La migración 008 (aplicada 28/10) los corrige: repetidas las pruebas tras aplicarla, cumplen 31 de 31.
+Repetidas con la 009 aplicada (script adaptado): 31 de 31.
 La tabla describe el comportamiento actual.
 
 | | ADMIN | SUPERVISOR | OPERARIO | Sin sesión |
@@ -89,4 +90,4 @@ ese error muestra los resultados y deshace todos los cambios (solo puede saltar 
 Repetirlo después de cada migración. El conector de Claude Code no puede ejecutarlo porque contiene `UPDATE`/`DELETE`.
 Desde el 28/10 el script está adaptado a la migración 009 (cabecera sin finca, líneas que empiezan con DESPLAZAMIENTO):
 ejecutarlo solo con la 009 aplicada. Las reglas del módulo 1 se prueban en `pruebas/pruebas_modulo1.sql`
-(30/30 el 28/10 tras aplicar la 009). Resultado de `pruebas_por_rol.sql` con la 009: pendiente de revisar.
+(30/30 el 28/10 tras aplicar la 009). `pruebas_por_rol.sql` con la 009: 31/31 el 28/10.
