@@ -15,6 +15,8 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `007_funciones_app.sql` | Aplicada 22/10 | `panel_resumen()`, `operarios_sin_parte()` |
 | `007b_guardar_parte.sql` | Aplicada 22/10 desde el SQL Editor (no figura en el historial) | `guardar_parte()`: guardado atómico de parte + líneas |
 | `008_supervisor_sin_autorrevision.sql` | Aplicada y verificada 28/10 (31/31 casos) | El supervisor no toca líneas de ningún parte (salvo al crear el suyo) ni aprueba/rechaza sus propios partes |
+| `009a_borrar_partes_prueba.sql` | Ejecutada 28/10 desde el SQL Editor | Borra los partes de prueba nº 1, 2 y 4 (quedan 0 partes y 0 líneas) |
+| `009_lineas_y_validaciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); verificada 30/30 con `pruebas/pruebas_modulo1.sql` | Módulo 1: tipos DESPLAZAMIENTO / MOTIVOS PERSONALES (TD001, TP001), cabecera sin finca/vehículo/tiempo, 15 min, `validar_parte()`, líneas solo vía `guardar_parte()` |
 
 El conector de Supabase usado desde Claude Code bloquea las sentencias con `DELETE`/`DROP`/`UPDATE`;
 por eso 004b y 007b se ejecutaron en Dashboard → SQL Editor. Lo ejecutado desde el SQL Editor no queda en
@@ -35,7 +37,7 @@ La tabla describe el comportamiento actual.
 | `operarios` (usuarios) | Todo, incluido borrar | Solo su ficha | Solo su ficha | Nada |
 | `operarios_nombres()` | Todos | Todos (código y nombre) | El suyo | — |
 | `partes_cab` | Todo, incluido borrar | Leer todos; crear los suyos (en Pendiente); aprobar/rechazar solo los de otros | Crear y leer los suyos; editar en Pendiente | Nada |
-| `partes_det` | Todo | Leer; añadir líneas solo al crear su propio parte | Los de sus partes en Pendiente | Nada |
+| `partes_det` (solo vía `guardar_parte()` desde la 009) | Todo | Leer; añadir líneas solo al crear su propio parte | Los de sus partes en Pendiente | Nada |
 | `partes_mant` | Todo | Leer, crear, editar | Los suyos | Nada |
 | `auditoria` | Leer | Leer (sin `operarios`) | Nada | Nada |
 
@@ -45,6 +47,10 @@ Reglas que impone la BD (no solo la interfaz):
 - Un supervisor no puede cambiar el contenido de un parte, ni cabecera ni líneas, tampoco de los suyos; rechazar exige comentario.
 - Un supervisor no aprueba ni rechaza sus propios partes ni los crea ya revisados; los revisa un ADMIN.
 - Un parte por operario y día; salida > entrada; la parcela debe ser de su finca.
+- (009) Horas y pausas en múltiplos de 15 min; `h_ext` ≥ 0 en cuartos de hora.
+- (009) Líneas dentro de la jornada y sin solapes; la primera (sin contar MOTIVOS PERSONALES) es un
+  DESPLAZAMIENTO con vehículo; cambiar de finca exige otro DESPLAZAMIENTO; MOTIVOS PERSONALES solo lleva horas;
+  el resto de tareas exige finca. Obliga también al ADMIN y se comprueba al confirmar cada guardado.
 - Un registro dado de baja no se puede usar en partes nuevos (los antiguos lo conservan).
 - `creado_por`, fechas de creación, `supervisor_revisa`, `fecha_revision`, `fecha_baja`, `baja_por` los fija la BD.
 - Cada cambio en catálogos y usuarios queda en `auditoria` (quién, cuándo, antes/después).
@@ -81,3 +87,6 @@ npm run check:supabase
 (SUPERVISOR) y T000 (ADMIN) con 31 casos. Termina con un error `RESULTADOS(rollback) [...]` a propósito:
 ese error muestra los resultados y deshace todos los cambios (solo puede saltar la numeración de `num_parte`).
 Repetirlo después de cada migración. El conector de Claude Code no puede ejecutarlo porque contiene `UPDATE`/`DELETE`.
+Desde el 28/10 el script está adaptado a la migración 009 (cabecera sin finca, líneas que empiezan con DESPLAZAMIENTO):
+ejecutarlo solo con la 009 aplicada. Las reglas del módulo 1 se prueban en `pruebas/pruebas_modulo1.sql`
+(30/30 el 28/10 tras aplicar la 009). Resultado de `pruebas_por_rol.sql` con la 009: pendiente de revisar.

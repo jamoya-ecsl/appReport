@@ -2,7 +2,10 @@
 //   #/login · #/inicio · #/partes?filtros · #/partes/nuevo · #/partes/:id · #/partes/:id/editar
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
-import { ESTADOS, esGestor, puedeEditar, motivoNoEditable, puedeRevisar, calcHoras, calcTotHoras, validarParte } from './rules.js';
+import {
+  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable, puedeRevisar,
+  calcHoras, calcTotHoras, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
+} from './rules.js';
 
 const root = document.getElementById('app');
 const st = { api: null, user: null, cat: null, operarios: [] };
@@ -182,12 +185,12 @@ function tablaPartes(partes) {
   }
   const gestor = esGestor(st.user);
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Nº</th><th>Fecha</th>${gestor ? '<th>Operario</th>' : ''}<th>Finca</th><th>Horas</th><th>Líneas</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Nº</th><th>Fecha</th>${gestor ? '<th>Operario</th>' : ''}<th>Fincas</th><th>Horas</th><th>Líneas</th><th>Estado</th></tr></thead>
     <tbody>${partes.map((p) => `
       <tr class="clickable" data-href="#/partes/${esc(p.id_parte)}" tabindex="0">
         <td>${esc(p.num_parte)}</td><td>${fmtFecha(p.fecha)}</td>
         ${gestor ? `<td>${esc(nombreOperario(p.operario))}</td>` : ''}
-        <td>${esc(nombreFinca(p.finca))}</td><td>${fmtHoras(p.tot_horas)}</td><td>${esc(p.n_lineas)}</td><td>${badge(p.estado)}</td>
+        <td>${esc((p.fincas || []).map(nombreFinca).join(', ') || (p.mat_nave ? 'Nave' : '—'))}</td><td>${fmtHoras(p.tot_horas)}</td><td>${esc(p.n_lineas)}</td><td>${badge(p.estado)}</td>
       </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -211,7 +214,7 @@ async function viewLista(q) {
     <form id="filtros" class="filters">
       <label>Estado <select name="estado"><option value="">Todos</option>${ESTADOS.map((e) => `<option ${q.estado === e ? 'selected' : ''}>${e}</option>`).join('')}</select></label>
       ${gestor ? `<label>Operario <select name="operario">${options(st.operarios, q.operario, 'cod_ope', (o) => o.usuario, 'Todos')}</select></label>` : ''}
-      <label>Finca <select name="finca">${options(st.cat.fincas, q.finca, 'cod_fin', (f) => f.finca, 'Todas')}</select></label>
+      <label>Finca (en tareas) <select name="finca">${options(st.cat.fincas, q.finca, 'cod_fin', (f) => f.finca, 'Todas')}</select></label>
       <label>Desde <input type="date" name="desde" value="${esc(q.desde || '')}"></label>
       <label>Hasta <input type="date" name="hasta" value="${esc(q.hasta || '')}"></label>
       <a class="link" href="#/partes">Limpiar</a>
@@ -252,14 +255,12 @@ async function viewDetalle(id) {
       ${campo('Total horas', `<strong>${fmtHoras(p.tot_horas)}</strong>`)}
       ${campo('Horas extra', fmtHoras(p.h_ext))}
       ${campo('Mant. nave', p.mat_nave ? 'Sí' : 'No')}
-      ${campo('Finca', esc(nombreFinca(p.finca)))}
-      ${campo('Vehículo', esc(nombreVehiculo(p.vehiculo)))}
       ${campo('Observaciones', esc(p.obs || '—'))}
     </dl></section>
     <section class="card"><h2>Tareas realizadas (${p.lineas.length})</h2>
       ${p.lineas.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Tarea</th><th>Finca</th><th>Parcela</th><th>Vehículo</th><th>Apero</th><th>Horario</th><th>Horas</th><th>Obs.</th></tr></thead>
-        <tbody>${p.lineas.map((l) => `<tr>
+        <tbody>${ordenarLineas(p.lineas).map((l) => `<tr>
           <td>${esc(nombreTarea(l.tarea))}</td><td>${esc(nombreFinca(l.finca))}</td><td>${esc(nombreParcela(l.parcela))}</td>
           <td>${esc(nombreVehiculo(l.vehiculo))}</td><td>${esc(nombreApero(l.apero))}</td>
           <td>${esc(l.h_ini)}–${esc(l.h_fin)}</td><td>${fmtHoras(l.t_horas ?? calcHoras(l.h_ini, l.h_fin))}</td><td>${esc(l.obs || '')}</td></tr>`).join('')}
@@ -319,11 +320,13 @@ async function viewForm(id) {
   }
   const cab = p || {
     operario: u.cod_ope, fecha: new Date().toISOString().slice(0, 10), h_ent: '07:30', h_sal: '16:00',
-    t_alm_min: 30, t_com_min: 0, h_ext: 0, mat_nave: false, finca: '', vehiculo: '', obs: '',
+    t_alm_min: 30, t_com_min: 0, h_ext: 0, mat_nave: false, obs: '',
   };
-  const lineas = p ? p.lineas : [];
-  const puedeElegirOperario = !id && u.rol_app === 'ADMIN';
   const { cat } = st;
+  // Parte nuevo: se propone una primera línea de DESPLAZAMIENTO que empieza a la hora de entrada.
+  const desplazamiento = cat.tareas.find((t) => t.tipo === TIPO_DESPLAZAMIENTO && t.activo !== false);
+  const lineas = p ? ordenarLineas(p.lineas) : [{ tarea: desplazamiento?.cod_tar || '', h_ini: cab.h_ent }];
+  const puedeElegirOperario = !id && u.rol_app === 'ADMIN';
 
   main.innerHTML = `
     <a class="link" href="${id ? `#/partes/${esc(id)}` : '#/partes'}">← Cancelar</a>
@@ -334,22 +337,23 @@ async function viewForm(id) {
           ? `<select name="operario">${options(st.operarios.filter((o) => o.activo), cab.operario, 'cod_ope', (o) => o.usuario)}</select>`
           : `<input value="${esc(nombreOperario(cab.operario))}" disabled><input type="hidden" name="operario" value="${esc(cab.operario)}">`}</label>
         <label>Fecha <input type="date" name="fecha" value="${esc(cab.fecha)}" required></label>
-        <label>Hora entrada <input type="time" name="h_ent" value="${esc(cab.h_ent)}" required></label>
-        <label>Hora salida <input type="time" name="h_sal" value="${esc(cab.h_sal)}" required></label>
-        <label>Almuerzo (min) <input type="number" min="0" step="5" name="t_alm_min" value="${esc(cab.t_alm_min)}"></label>
-        <label>Comida (min) <input type="number" min="0" step="5" name="t_com_min" value="${esc(cab.t_com_min)}"></label>
+        <label>Hora entrada <input type="time" step="900" name="h_ent" value="${esc(cab.h_ent)}" required></label>
+        <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}" required></label>
+        <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}"></label>
+        <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}"></label>
         <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}"></label>
         <label class="check"><input type="checkbox" name="mat_nave" ${cab.mat_nave ? 'checked' : ''}> Mantenimiento nave</label>
-        <label>Finca <select name="finca" required>${options(cat.fincas, cab.finca, 'cod_fin', (f) => f.finca)}</select></label>
-        <label>Vehículo <select name="vehiculo">${options(cat.vehiculos, cab.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
         <label class="wide">Observaciones <textarea name="obs" rows="2">${esc(cab.obs || '')}</textarea></label>
       </div>
       <p class="total">Total jornada: <strong id="tot">—</strong></p></section>
 
       <section class="card"><div class="page-head"><h2>Tareas realizadas</h2>
         <button type="button" class="secondary" id="add-linea">+ Añadir tarea</button></div>
+        <p class="muted">Horas en intervalos de 15 minutos. La primera tarea (sin contar MOTIVOS PERSONALES) es un
+          DESPLAZAMIENTO con finca y vehículo; para cambiar de finca, añade otro DESPLAZAMIENTO.
+          Las tareas se ordenan por hora de inicio y no pueden solaparse.</p>
         <div id="lineas"></div>
-        <p class="muted" id="sin-lineas">Aún no hay tareas. Añade al menos una para detallar la jornada.</p>
+        <p class="muted" id="sin-lineas">Aún no hay tareas.</p>
       </section>
 
       <div id="form-msg"></div>
@@ -360,22 +364,52 @@ async function viewForm(id) {
   const cont = main.querySelector('#lineas');
 
   const parcelasDe = (finca) => cat.parcelas.filter((x) => !finca || x.finca === finca);
+  const etiquetaParcela = (x) => `${x.nom_parc} (${x.superficie ?? '?'} ha)`;
   function lineaHtml(l = {}) {
-    const finca = l.finca ?? form.finca.value;
+    const finca = l.finca || '';
     return `<fieldset class="linea">
-      <label>Tarea <select name="tarea">${options(cat.tareas, l.tarea, 'cod_tar', (t) => `${t.tareas} (${t.tipo === 'POR HORAS' ? 'h' : 'ha'})`)}</select></label>
-      <label>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca, '— Sin finca —')}</select></label>
-      <label>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', (x) => `${x.nom_parc} (${x.superficie ?? '?'} ha)`, '— Sin parcela —')}</select></label>
-      <label>Vehículo <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo ?? form.vehiculo.value, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
-      <label>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
-      <label>Inicio <input type="time" name="h_ini" value="${esc(l.h_ini || '')}"></label>
-      <label>Fin <input type="time" name="h_fin" value="${esc(l.h_fin || '')}"></label>
+      <label>Tarea <select name="tarea">${options(cat.tareas, l.tarea, 'cod_tar', (t) => `${t.tareas} (${etiquetaTipo(t.tipo)})`)}</select></label>
+      <label data-campo>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca)}</select></label>
+      <label data-campo>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
+      <label data-campo><span class="lbl-veh">Vehículo</span> <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
+      <label data-campo>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
+      <label>Inicio <input type="time" step="900" name="h_ini" value="${esc(l.h_ini || '')}"></label>
+      <label>Fin <input type="time" step="900" name="h_fin" value="${esc(l.h_fin || '')}"></label>
       <label class="wide">Obs. <input name="l_obs" value="${esc(l.obs || '')}"></label>
       <input type="hidden" name="id_linea" value="${esc(l.id_linea || '')}">
       <button type="button" class="link danger quitar">Quitar</button>
     </fieldset>`;
   }
-  const addLinea = (l) => { cont.insertAdjacentHTML('beforeend', lineaHtml(l)); refrescar(); };
+  // Campos según el tipo de tarea: MOTIVOS PERSONALES solo lleva horas; DESPLAZAMIENTO exige vehículo.
+  function aplicarTipo(fs) {
+    const tipo = tipoTarea(cat, fs.querySelector('[name=tarea]').value);
+    const personal = tipo === TIPO_PERSONAL;
+    fs.querySelectorAll('[data-campo]').forEach((lab) => {
+      lab.hidden = personal;
+      if (personal) lab.querySelector('select').value = '';
+    });
+    fs.querySelector('.lbl-veh').textContent = tipo === TIPO_DESPLAZAMIENTO ? 'Vehículo (obligatorio)' : 'Vehículo';
+  }
+  const leerLineas = () => [...cont.querySelectorAll('.linea')].map((f) => {
+    const v = (n) => f.querySelector(`[name=${n}]`).value;
+    const personal = tipoTarea(cat, v('tarea')) === TIPO_PERSONAL;
+    const opcional = (n) => (personal ? null : v(n) || null);
+    return { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
+      vehiculo: opcional('l_vehiculo'), apero: opcional('apero'), h_ini: v('h_ini'), h_fin: v('h_fin'), obs: v('l_obs') };
+  });
+  // Valores propuestos para una línea nueva (se pueden cambiar): empieza cuando acaba la última tarea
+  // y repite finca, vehículo y apero de la última tarea que los tenga.
+  function propuestaSiguiente() {
+    const orden = ordenarLineas(leerLineas().filter((l) => l.h_ini));
+    const ultima = orden[orden.length - 1];
+    const conFinca = [...orden].reverse().find((l) => l.finca);
+    return { h_ini: ultima?.h_fin || '', finca: conFinca?.finca, vehiculo: conFinca?.vehiculo, apero: conFinca?.apero };
+  }
+  const addLinea = (l) => {
+    cont.insertAdjacentHTML('beforeend', lineaHtml(l));
+    aplicarTipo(cont.lastElementChild);
+    refrescar();
+  };
   function refrescar() {
     const tot = calcTotHoras(Object.fromEntries(new FormData(form)));
     main.querySelector('#tot').textContent = fmtHoras(tot);
@@ -383,26 +417,19 @@ async function viewForm(id) {
   }
 
   lineas.forEach(addLinea);
-  if (!id) addLinea({ h_ini: cab.h_ent, h_fin: cab.h_sal });
   refrescar();
 
-  main.querySelector('#add-linea').addEventListener('click', () => addLinea({}));
+  main.querySelector('#add-linea').addEventListener('click', () => addLinea(propuestaSiguiente()));
   cont.addEventListener('click', (ev) => {
     if (ev.target.classList.contains('quitar')) { ev.target.closest('.linea').remove(); refrescar(); }
   });
-  // Parcela dependiente de la finca de la línea
   cont.addEventListener('change', (ev) => {
-    if (ev.target.name !== 'l_finca') return;
-    const sel = ev.target.closest('.linea').querySelector('[name=parcela]');
-    sel.innerHTML = options(parcelasDe(ev.target.value), '', 'cod_par', (x) => `${x.nom_parc} (${x.superficie ?? '?'} ha)`, '— Sin parcela —');
-  });
-  // Al elegir la finca de la jornada, las líneas sin finca la heredan
-  form.finca.addEventListener('change', () => {
-    cont.querySelectorAll('[name=l_finca]').forEach((sel) => {
-      if (sel.value) return;
-      sel.value = form.finca.value;
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const fs = ev.target.closest('.linea');
+    if (ev.target.name === 'tarea') aplicarTipo(fs);
+    // Parcela dependiente de la finca de la línea
+    if (ev.target.name === 'l_finca') {
+      fs.querySelector('[name=parcela]').innerHTML = options(parcelasDe(ev.target.value), '', 'cod_par', etiquetaParcela, '— Sin parcela —');
+    }
   });
   form.addEventListener('input', refrescar);
 
@@ -412,13 +439,9 @@ async function viewForm(id) {
     const nuevaCab = {
       operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent, h_sal: fd.h_sal,
       t_alm_min: Number(fd.t_alm_min) || 0, t_com_min: Number(fd.t_com_min) || 0, h_ext: Number(fd.h_ext) || 0,
-      mat_nave: form.mat_nave.checked, finca: fd.finca, vehiculo: fd.vehiculo || null, obs: fd.obs,
+      mat_nave: form.mat_nave.checked, obs: fd.obs,
     };
-    const nuevasLineas = [...cont.querySelectorAll('.linea')].map((f) => {
-      const v = (n) => f.querySelector(`[name=${n}]`).value;
-      return { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: v('l_finca') || null, parcela: v('parcela') || null, vehiculo: v('l_vehiculo') || null,
-        apero: v('apero') || null, h_ini: v('h_ini'), h_fin: v('h_fin'), obs: v('l_obs') };
-    });
+    const nuevasLineas = leerLineas();
     const msg = main.querySelector('#form-msg');
     const errores = validarParte(nuevaCab, nuevasLineas, cat);
     if (errores.length) {

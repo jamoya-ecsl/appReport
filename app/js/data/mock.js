@@ -1,10 +1,10 @@
 // MODO DEMO — todos los datos de este archivo son FICTICIOS.
 // No proceden de BBDD.xlsx ni de PT_EC.xlsx; solo imitan su estructura (códigos, campos, estados).
 // Se guardan en sessionStorage del navegador: se pierden al cerrar la pestaña.
-// Emula las reglas del esquema propuesto (RLS por rol, un parte por operario y día, etc.).
-import { esGestor, puedeEditar, puedeRevisar, calcHoras, calcTotHoras } from '../rules.js';
+// Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
+import { esGestor, puedeEditar, puedeRevisar, calcHoras, calcTotHoras, validarParte, ordenarLineas } from '../rules.js';
 
-const KEY = 'pt-demo-v1';
+const KEY = 'pt-demo-v2';  // v2: la cabecera ya no tiene finca ni vehículo (migración 009)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -34,6 +34,8 @@ const CATALOGOS = {
     { cod_tar: 'TE902', tareas: 'Abonado (demo)', tipo: 'POR SUPERFICIE (HAS)' },
     { cod_tar: 'TT901', tareas: 'Riego (demo)', tipo: 'POR HORAS' },
     { cod_tar: 'TT902', tareas: 'Taller (demo)', tipo: 'POR HORAS' },
+    { cod_tar: 'TD901', tareas: 'Desplazamiento (demo)', tipo: 'DESPLAZAMIENTO' },
+    { cod_tar: 'TP901', tareas: 'Motivos personales (demo)', tipo: 'MOTIVOS PERSONALES' },
   ],
   vehiculos: [
     { id_mat: 'DEMO-0001', alias: 'TD1', equipo: 'Tractor demo A', tipo: 'TRACTOR' },
@@ -56,26 +58,35 @@ function semilla() {
   const cab = (n, operario, offset, estado, extra = {}) => ({
     id_parte: `demo-${n}`, num_parte: n, operario, fecha: dia(offset),
     h_ent: '07:30', h_sal: '16:00', t_alm_min: 30, t_com_min: 0, h_ext: 0, mat_nave: false,
-    finca: 'FD1', vehiculo: 'DEMO-0001', obs: '', estado,
+    obs: '', estado,
     creado_por: OPERARIOS.find((o) => o.cod_ope === operario).email,
     fch_creacion: new Date().toISOString(), fch_modificacion: new Date().toISOString(),
     supervisor_revisa: null, fecha_revision: null, comentario_supervisor: null, ...extra,
   });
   const partes = [
     cab(1, 'D002', -3, 'Aprobado', { supervisor_revisa: 'D001', fecha_revision: new Date().toISOString() }),
-    cab(2, 'D002', -2, 'Rechazado', { finca: 'FD2', supervisor_revisa: 'D001', fecha_revision: new Date().toISOString(),
+    cab(2, 'D002', -2, 'Rechazado', { supervisor_revisa: 'D001', fecha_revision: new Date().toISOString(),
       comentario_supervisor: 'Falta indicar la parcela en la línea de abonado (ficticio).' }),
     cab(3, 'D002', -1, 'Pendiente'),
-    cab(4, 'D003', -1, 'Pendiente', { finca: 'FD3', vehiculo: 'DEMO-0002', h_ent: '08:00', h_sal: '15:00', t_alm_min: 0 }),
+    cab(4, 'D003', -1, 'Pendiente', { h_ent: '08:00', h_sal: '15:00', t_alm_min: 0 }),
   ];
-  const L = (id, id_parte, tarea, finca, parcela, h_ini, h_fin, apero = null) =>
-    ({ id_linea: `l-${id}`, id_parte, tarea, finca, parcela, vehiculo: 'DEMO-0001', apero, h_ini, h_fin, obs: '' });
+  const L = (id, id_parte, tarea, finca, parcela, h_ini, h_fin, apero = null, vehiculo = 'DEMO-0001') =>
+    ({ id_linea: `l-${id}`, id_parte, tarea, finca, parcela, vehiculo, apero, h_ini, h_fin, obs: '' });
+  const P = (id, id_parte, h_ini, h_fin) =>
+    ({ id_linea: `l-${id}`, id_parte, tarea: 'TP901', finca: null, parcela: null, vehiculo: null, apero: null, h_ini, h_fin, obs: '' });
   const lineas = [
-    L(1, 'demo-1', 'TE901', 'FD1', 'PD01', '07:30', '12:00', 'BDEMO0001'),
-    L(2, 'demo-1', 'TT901', 'FD1', 'PD02', '12:30', '16:00'),
-    L(3, 'demo-2', 'TE902', 'FD2', null, '07:30', '16:00', 'BDEMO0002'),
-    L(4, 'demo-3', 'TT901', 'FD1', 'PD01', '07:30', '16:00'),
-    L(5, 'demo-4', 'TT902', 'FD3', null, '08:00', '15:00'),
+    L(1, 'demo-1', 'TD901', 'FD1', null, '07:30', '08:00'),
+    L(2, 'demo-1', 'TE901', 'FD1', 'PD01', '08:00', '12:00', 'BDEMO0001'),
+    L(3, 'demo-1', 'TT901', 'FD1', 'PD02', '12:30', '16:00'),
+    L(4, 'demo-2', 'TD901', 'FD2', null, '07:30', '08:00'),
+    L(5, 'demo-2', 'TE902', 'FD2', null, '08:00', '16:00', 'BDEMO0002'),
+    L(6, 'demo-3', 'TD901', 'FD1', null, '07:30', '08:00'),
+    L(7, 'demo-3', 'TT901', 'FD1', 'PD01', '08:00', '12:00'),
+    P(8, 'demo-3', '12:00', '12:30'),
+    L(9, 'demo-3', 'TD901', 'FD3', null, '12:30', '13:00'),
+    L(10, 'demo-3', 'TT902', 'FD3', 'PD05', '13:00', '16:00'),
+    L(11, 'demo-4', 'TD901', 'FD3', null, '08:00', '08:30', null, 'DEMO-0002'),
+    L(12, 'demo-4', 'TT902', 'FD3', null, '08:30', '15:00', null, 'DEMO-0002'),
   ];
   return { partes, lineas, seq: 4, cod: null };
 }
@@ -90,9 +101,11 @@ export function createMockApi(reason) {
   const guardar = () => { try { sessionStorage.setItem(KEY, JSON.stringify(db)); } catch { /* sin storage */ } };
   const yo = () => OPERARIOS.find((o) => o.cod_ope === db.cod) || null;
   const visible = (p) => esGestor(yo()) || p.operario === yo()?.cod_ope;
+  const lineasDe = (id) => db.lineas.filter((l) => l.id_parte === id);
   const conHoras = (p) => ({
     ...p, tot_horas: calcTotHoras(p),
-    n_lineas: db.lineas.filter((l) => l.id_parte === p.id_parte).length,
+    n_lineas: lineasDe(p.id_parte).length,
+    fincas: [...new Set(lineasDe(p.id_parte).map((l) => l.finca).filter(Boolean))],
   });
   const lineaConHoras = (l) => ({ ...l, t_horas: calcHoras(l.h_ini, l.h_fin) });
   const exigirSesion = () => { if (!yo()) throw new Error('Sesión no iniciada.'); };
@@ -118,7 +131,7 @@ export function createMockApi(reason) {
         .filter(visible)
         .filter((p) => !f.estado || p.estado === f.estado)
         .filter((p) => !f.operario || p.operario === f.operario)
-        .filter((p) => !f.finca || p.finca === f.finca)
+        .filter((p) => !f.finca || lineasDe(p.id_parte).some((l) => l.finca === f.finca))
         .filter((p) => !f.desde || p.fecha >= f.desde)
         .filter((p) => !f.hasta || p.fecha <= f.hasta)
         .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.num_parte - a.num_parte)
@@ -130,7 +143,7 @@ export function createMockApi(reason) {
       await wait();
       const p = db.partes.find((x) => x.id_parte === id);
       if (!p || !visible(p)) throw new Error('Parte no encontrado o sin permiso para verlo.');
-      return { ...conHoras(p), lineas: db.lineas.filter((l) => l.id_parte === id).map(lineaConHoras) };
+      return { ...conHoras(p), lineas: ordenarLineas(lineasDe(id)).map(lineaConHoras) };
     },
 
     async saveParte({ id_parte, cab, lineas }) {
@@ -149,6 +162,9 @@ export function createMockApi(reason) {
         throw new Error('Solo un ADMIN puede crear partes de otro operario.');
       }
       const operario = id_parte ? p.operario : cab.operario;
+      // Igual que validar_parte() en la BD: se rechaza el guardado entero con el primer error.
+      const errores = validarParte({ ...cab, operario }, lineas, CATALOGOS);
+      if (errores.length) throw new Error(errores[0]);
       if (db.partes.some((x) => x.operario === operario && x.fecha === cab.fecha && x.id_parte !== id_parte)) {
         throw new Error('Ya existe un parte de este operario para esa fecha (un parte por día).');
       }
