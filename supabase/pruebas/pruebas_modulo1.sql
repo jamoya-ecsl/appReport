@@ -2,6 +2,7 @@
 -- Pruebas del módulo 1 (migración 009). Ejecutar DESPUÉS de aplicar 009a y 009.
 -- (M15/M16 adaptadas a la 011: las hace el ADMIN con h_ext_manual; antes de la 011 también funcionan.)
 -- (M19 adaptada a la 010: por la API el UPDATE directo afecta a 0 filas; M19b lo prueba desde SQL.)
+-- (S02/S03 adaptadas a la 013: el supervisor ya corrige partes en Pendiente. Antes de la 013 salen bloqueadas.)
 -- Dashboard → SQL Editor → pegar todo → Run.
 -- Termina con un error "RESULTADOS(rollback) [...]" a propósito: muestra los resultados y
 -- deshace todo (solo puede saltar la numeración de num_parte).
@@ -213,17 +214,25 @@ begin
     reset role; res := res || to_jsonb('S01 supervisor crea su propio parte con líneas (esperado OK): OK'::text);
   exception when others then res := res || to_jsonb('S01 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
+  -- S02/S03 adaptadas a la 013: el supervisor corrige partes en Pendiente (se reenvían las mismas
+  -- tareas para no alterar las horas por finca que comprueba S04).
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    perform guardar_parte(id_m01, cab || '{"fecha":"2099-03-01"}', '[]');
-    reset role; res := res || to_jsonb('S02 supervisor edita parte ajeno con guardar_parte (esperado bloqueado): FALLO, se permitió'::text);
-  exception when others then res := res || to_jsonb('S02 supervisor edita parte ajeno: bloqueado '||sqlstate||' '||sqlerrm); end;
+    perform guardar_parte(id_m01, cab || '{"fecha":"2099-03-01","obs":"corregido por supervisor"}',
+      (select jsonb_agg(jsonb_build_object('id_linea',d.id_linea,'tarea',d.tarea,'finca',d.finca,'parcela',d.parcela,
+         'vehiculo',d.vehiculo,'apero',d.apero,'h_ini',d.h_ini,'h_fin',d.h_fin)) from partes_det d where d.id_parte=id_m01));
+    select coalesce(obs,'null') into x from partes_cab where id_parte=id_m01;
+    reset role; res := res || to_jsonb('S02 supervisor corrige parte ajeno en Pendiente (esperado OK desde la 013): obs='||x);
+  exception when others then res := res || to_jsonb('S02 supervisor corrige parte ajeno (esperado OK desde la 013): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    perform guardar_parte(id_sup, cab || '{"fecha":"2099-03-20"}', '[]');
-    reset role; res := res || to_jsonb('S03 supervisor edita su propio parte (esperado bloqueado): FALLO, se permitió'::text);
-  exception when others then res := res || to_jsonb('S03 supervisor edita su propio parte: bloqueado '||sqlstate||' '||sqlerrm); end;
+    perform guardar_parte(id_sup, cab || '{"fecha":"2099-03-20","obs":"corregido"}',
+      (select jsonb_agg(jsonb_build_object('id_linea',d.id_linea,'tarea',d.tarea,'finca',d.finca,'parcela',d.parcela,
+         'vehiculo',d.vehiculo,'apero',d.apero,'h_ini',d.h_ini,'h_fin',d.h_fin)) from partes_det d where d.id_parte=id_sup));
+    select coalesce(obs,'null') into x from partes_cab where id_parte=id_sup;
+    reset role; res := res || to_jsonb('S03 supervisor corrige su propio parte en Pendiente (esperado OK desde la 013): obs='||x);
+  exception when others then res := res || to_jsonb('S03 supervisor corrige su propio parte (esperado OK desde la 013): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;

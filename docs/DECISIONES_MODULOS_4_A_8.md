@@ -7,7 +7,7 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
 | Módulo | Migración | Estado |
 |---|---|---|
 | 4 · Valores iniciales | `012_valores_iniciales.sql` | Aplicada y verificada 04/11 |
-| 5 · Supervisor y auditoría de partes | 013 | Por preparar |
+| 5 · Supervisor y auditoría de partes | `013_supervisor_y_auditoria_partes.sql` | Aplicada y verificada 04/11 |
 | 6 · `fin_vuelta` | 014 | Por preparar |
 | 7 · Archivo de tareas y vueltas | 015 | Por preparar |
 | 8 · PDF al aprobar | 016 + función del servidor (Edge Function) | Por preparar |

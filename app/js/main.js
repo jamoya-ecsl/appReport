@@ -6,7 +6,7 @@ import {
   ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable,
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
-  VALORES_INICIALES, conValoresIniciales,
+  VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -254,7 +254,7 @@ async function viewDetalle(id) {
       </div>
     </div>
     <div id="acc-msg"></div>
-    ${p.estado === 'Pendiente' && puedeCerrar(u, p) ? `<div class="state state-info">Cuando el parte esté completo, ciérralo para que lo revisen. <strong>Una vez cerrado ya no se puede reabrir</strong>${u.rol_app === 'ADMIN' ? '' : ' ni editar'}.</div>` : ''}
+    ${p.estado === 'Pendiente' && puedeCerrar(u, p) ? `<div class="state state-info">Cuando el parte esté completo, ciérralo para que lo revisen. <strong>Una vez cerrado ya no se puede reabrir</strong>${esGestor(u) ? '' : ' ni editar'}.</div>` : ''}
     ${p.estado === 'Rechazado' && p.comentario_supervisor ? `<div class="state state-error"><strong>Motivo del rechazo:</strong> ${esc(p.comentario_supervisor)}</div>` : ''}
     <section class="card"><h2>Jornada</h2><dl class="grid">
       ${campo('Operario', esc(nombreOperario(p.operario)))}
@@ -303,7 +303,7 @@ async function viewDetalle(id) {
     const err = errorCierre(p, p.lineas.length);
     if (err) { accMsg.innerHTML = errorHtml(new Error(err), { retry: false }); return; }
     const b = ev.currentTarget;
-    if (!confirm(`¿Cerrar el parte nº ${p.num_parte}? Después no se podrá reabrir${u.rol_app === 'ADMIN' ? '' : ' ni editar'}.`)) return;
+    if (!confirm(`¿Cerrar el parte nº ${p.num_parte}? Después no se podrá reabrir${esGestor(u) ? '' : ' ni editar'}.`)) return;
     b.disabled = true;
     try {
       await st.api.cerrarParte(p.id_parte);
@@ -377,7 +377,7 @@ async function viewForm(id) {
   // Parte nuevo: se propone una primera línea de DESPLAZAMIENTO que empieza a la hora de entrada.
   const desplazamiento = cat.tareas.find((t) => t.tipo === TIPO_DESPLAZAMIENTO && t.activo !== false);
   const lineas = p ? ordenarLineas(p.lineas) : [{ tarea: desplazamiento?.cod_tar || '', h_ini: cab.h_ent }];
-  const puedeElegirOperario = !id && u.rol_app === 'ADMIN';
+  const puedeElegirOperario = !id && puedeCrearParaOtros(u);  // ADMIN y SUPERVISOR (013)
 
   main.innerHTML = `
     <a class="link" href="${id ? `#/partes/${esc(id)}` : '#/partes'}">← Cancelar</a>
@@ -520,6 +520,8 @@ async function viewForm(id) {
     const msg = main.querySelector('#form-msg');
     // Se valida con los valores que guardará la BD (los vacíos ya sustituidos).
     const errores = validarParte(conValoresIniciales(nuevaCab, ini), nuevasLineas, cat);
+    const sinTareas = errorSinTareas(p?.estado, nuevaCab.mat_nave, nuevasLineas.length);
+    if (sinTareas) errores.push(`${sinTareas}.`);
     if (errores.length) {
       msg.innerHTML = `<div class="state state-error" role="alert"><strong>Revisa el formulario:</strong><ul>${errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
       msg.scrollIntoView({ behavior: 'smooth', block: 'center' });

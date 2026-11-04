@@ -11,16 +11,21 @@ export const TIPO_PERSONAL = 'MOTIVOS PERSONALES';
 
 export const esGestor = (u) => !!u && (u.rol_app === 'ADMIN' || u.rol_app === 'SUPERVISOR');
 
-// ADMIN: cualquier parte, en cualquier estado (sigue en su estado). OPERARIO: solo los suyos y solo
-// en "Pendiente". SUPERVISOR: ninguno, ni siquiera los suyos; solo cierra, aprueba o rechaza
-// (igual que los disparadores de la BD).
+// ADMIN: cualquier parte, en cualquier estado (sigue en su estado). SUPERVISOR (migración 013): los de
+// cualquier operario en "Pendiente" o "Cerrado". OPERARIO: solo los suyos y solo en "Pendiente".
+// (Igual que guardar_parte() y los disparadores de la BD.)
 export const puedeEditar = (u, p) =>
-  u?.rol_app === 'ADMIN' || (u?.rol_app === 'OPERARIO' && p.operario === u.cod_ope && p.estado === 'Pendiente');
+  u?.rol_app === 'ADMIN'
+  || (u?.rol_app === 'SUPERVISOR' && ['Pendiente', 'Cerrado'].includes(p.estado))
+  || (u?.rol_app === 'OPERARIO' && p.operario === u.cod_ope && p.estado === 'Pendiente');
 
 export const motivoNoEditable = (u, p) =>
   u?.rol_app === 'SUPERVISOR'
-    ? 'Como supervisor solo puedes cerrar, aprobar o rechazar partes, no modificar su contenido.'
+    ? `Este parte está "${p.estado}": como supervisor solo puedes corregir partes Pendientes o Cerrados. Lo corrige un ADMIN.`
     : `Este parte está "${p.estado}" y ya no lo puedes editar.`;
+
+// Crear partes a nombre de otro operario (migración 013): ADMIN y SUPERVISOR.
+export const puedeCrearParaOtros = (u) => u?.rol_app === 'ADMIN' || u?.rol_app === 'SUPERVISOR';
 
 // Cerrar (Pendiente → Cerrado): el OPERARIO los suyos; SUPERVISOR y ADMIN cualquiera.
 export const puedeCerrar = (u, p) =>
@@ -36,6 +41,11 @@ export const puedeBorrar = (u) => u?.rol_app === 'ADMIN';
 // Igual que el disparador tg_partes_cab_estado al cerrar.
 export const errorCierre = (p, nLineas) =>
   !p.mat_nave && !nLineas ? 'Para cerrar un parte sin mantenimiento en nave hace falta al menos una tarea' : null;
+
+// Igual que validar_parte() desde la 013: al corregir un parte ya cerrado no se le quitan todas las tareas.
+export const errorSinTareas = (estado, matNave, nLineas) =>
+  estado && estado !== 'Pendiente' && !matNave && !nLineas
+    ? `El parte está ${estado}: sin mantenimiento en nave necesita al menos una tarea` : null;
 
 const aMin = (t) => {
   if (!t) return null;

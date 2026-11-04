@@ -31,14 +31,17 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Lista | `#/partes` | Todos | "Mis partes" (operario) / "Todos los partes" (supervisor/admin). Filtros: estado, operario, finca, fechas |
 | Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, cierre y revisión. Cerrar (si está Pendiente), Aprobar/Rechazar (gestor, si está Cerrado), Borrar (ADMIN) |
 | Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
-| Editar | `#/partes/:id/editar` | ADMIN; OPERARIO (suyos, en Pendiente) | Mismo formulario. El supervisor no tiene acceso |
+| Editar | `#/partes/:id/editar` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Mismo formulario |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
 
 ## Reglas implementadas (mismas que la base de datos)
 - Estados (migración 010): `Pendiente → Cerrado → Aprobado | Rechazado`. Nadie reabre un parte; Aprobado y Rechazado son finales.
 - OPERARIO: ve y crea solo sus partes; edita solo en `Pendiente`; cierra los suyos.
-- SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); cierra cualquiera y solo aprueba o rechaza los **Cerrados de otros**. Sus partes los revisa un ADMIN.
+- SUPERVISOR (migración 013): ve todos; crea partes a nombre de cualquier operario activo (para quien olvidó hacerlo);
+  **corrige** los Pendientes y Cerrados de cualquiera (no los Aprobados ni Rechazados); cierra cualquiera y aprueba o rechaza
+  los Cerrados, también los que él creó, salvo aquellos de los que es titular (esos los revisa un ADMIN).
+- Al corregir un parte ya cerrado (supervisor o ADMIN) no se le pueden quitar todas las tareas si no es de mantenimiento en nave.
 - ADMIN: ve todos, edita cualquiera en cualquier estado (sigue en su estado), cierra, aprueba/rechaza y borra (con copia en auditoría).
 - Cerrar exige un parte válido y, si no es de mantenimiento en nave, al menos una tarea.
 - Horas extra (migración 011): las calcula la BD, `max(total − th_jornada, 0)` con `th_jornada` = 8,5 h (desde la 012).
@@ -47,7 +50,7 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
   configuración. Si se deja vacío alguno de esos campos, al crear o al editar, se guarda el valor de la configuración;
   para no tener pausa hay que escribir 0. Con esos valores un parte sale con 8,5 h y 0 horas extra.
 - "Horas de tareas" (`ht_tareas`): suma de las tareas sin MOTIVOS PERSONALES, calculada al consultar.
-- Solo ADMIN puede crear un parte a nombre de otro operario.
+- ADMIN y SUPERVISOR pueden crear un parte a nombre de otro operario (solo operarios activos).
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
 

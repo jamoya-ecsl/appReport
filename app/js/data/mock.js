@@ -3,7 +3,7 @@
 // Se guardan en sessionStorage del navegador: se pierden al cerrar la pestaña.
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
 import {
-  esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
+  esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
@@ -171,13 +171,17 @@ export function createMockApi(reason) {
       let p;
       if (id_parte) {
         p = db.partes.find((x) => x.id_parte === id_parte);
-        if (!p || !visible(p) || !puedeEditar(u, p)) {
-          throw new Error(u.rol_app === 'SUPERVISOR'
-            ? 'Un supervisor solo puede aprobar o rechazar el parte, no modificar su contenido'
-            : 'No tienes permiso para editar este parte.');
+        // Como guardar_parte() desde la 013: el SUPERVISOR corrige Pendientes y Cerrados.
+        if (!p || !visible(p) || !puedeEditar(u, p)) throw new Error('Parte no encontrado o sin permiso para editarlo');
+        const e = errorSinTareas(p.estado, cab.mat_nave, lineas.length);
+        if (e) throw new Error(e);
+      } else {
+        if (cab.operario !== u.cod_ope && !puedeCrearParaOtros(u)) {
+          throw new Error('Solo un ADMIN o un SUPERVISOR pueden crear partes de otro operario');
         }
-      } else if (cab.operario !== u.cod_ope && u.rol_app !== 'ADMIN') {
-        throw new Error('Solo un ADMIN puede crear partes de otro operario.');
+        if (!OPERARIOS.some((o) => o.cod_ope === cab.operario && o.activo)) {
+          throw new Error(`El operario ${cab.operario} no existe o está dado de baja`);
+        }
       }
       const operario = id_parte ? p.operario : cab.operario;
       // Igual que validar_parte() en la BD: se rechaza el guardado entero con el primer error.
