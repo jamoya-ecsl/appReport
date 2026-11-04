@@ -41,8 +41,11 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 - SUPERVISOR: ve todos y puede crear los suyos, pero **no modifica el contenido de ningún parte** (ni los suyos); cierra cualquiera y solo aprueba o rechaza los **Cerrados de otros**. Sus partes los revisa un ADMIN.
 - ADMIN: ve todos, edita cualquiera en cualquier estado (sigue en su estado), cierra, aprueba/rechaza y borra (con copia en auditoría).
 - Cerrar exige un parte válido y, si no es de mantenimiento en nave, al menos una tarea.
-- Horas extra (migración 011): las calcula la BD, `max(total − th_jornada, 0)` con `th_jornada` = 8 h. El operario
-  las ve sin poder cambiarlas; el ADMIN puede corregirlas a mano (se mantienen hasta que cambien horas o pausas).
+- Horas extra (migración 011): las calcula la BD, `max(total − th_jornada, 0)` con `th_jornada` = 8,5 h (desde la 012).
+  El operario las ve sin poder cambiarlas; el ADMIN puede corregirlas a mano (se mantienen hasta que cambien horas o pausas).
+- Valores iniciales (migración 012): el formulario propone 07:30 – 18:00, 30 min de almuerzo y 90 de comida, leídos de la
+  configuración. Si se deja vacío alguno de esos campos, al crear o al editar, se guarda el valor de la configuración;
+  para no tener pausa hay que escribir 0. Con esos valores un parte sale con 8,5 h y 0 horas extra.
 - "Horas de tareas" (`ht_tareas`): suma de las tareas sin MOTIVOS PERSONALES, calculada al consultar.
 - Solo ADMIN puede crear un parte a nombre de otro operario.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
@@ -73,7 +76,7 @@ Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admi
 | `scripts/serve.mjs` | Servidor local sin dependencias; no envía nunca claves secretas al navegador |
 
 ## Qué llevar a Lovable
-- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`) y los mensajes de error de `supabase.js`.
+- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`) y los mensajes de error de `supabase.js`.
 - **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
 - **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.

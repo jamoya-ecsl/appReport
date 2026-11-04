@@ -58,6 +58,20 @@ export function calcHoras(ini, fin) {
   return r2((b - a) / 60);
 }
 
+// Valores iniciales del parte (migración 012). Los lee rpc('valores_iniciales_parte'); estos solo se
+// usan si no se pueden leer (por ejemplo, antes de aplicar la 012).
+export const VALORES_INICIALES = { h_ent: '07:30', h_sal: '18:00', t_alm_min: 30, t_com_min: 90 };
+const vacio = (v) => v == null || String(v).trim() === '';
+// Igual que guardar_parte() desde la 012: entrada, salida, almuerzo o comida vacíos → valor de la
+// configuración, al crear y al editar. Un 0 escrito se respeta.
+export const conValoresIniciales = (cab, ini = VALORES_INICIALES) => ({
+  ...cab,
+  h_ent: vacio(cab.h_ent) ? ini.h_ent : cab.h_ent,
+  h_sal: vacio(cab.h_sal) ? ini.h_sal : cab.h_sal,
+  t_alm_min: vacio(cab.t_alm_min) ? Number(ini.t_alm_min) : Number(cab.t_alm_min),
+  t_com_min: vacio(cab.t_com_min) ? Number(ini.t_com_min) : Number(cab.t_com_min),
+});
+
 // Igual que la columna generada tot_horas: (salida - entrada) - almuerzo - comida
 export function calcTotHoras(c) {
   const base = calcHoras(c.h_ent, c.h_sal);

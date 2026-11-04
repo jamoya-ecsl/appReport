@@ -20,7 +20,7 @@ begin
   select cod_fin into f2 from fincas where activo and cod_fin <> f1 order by cod_fin limit 1;
   select id_mat into v1 from vehiculos where activo order by id_mat limit 1;
   select cod_tar into t1 from tareas where activo and tipo = 'POR HORAS' order by cod_tar limit 1;
-  cab := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes');
+  cab := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes','t_com','0 minutes');  -- comida 0 explícita (012)
 
   -- Atajos para construir líneas: D = desplazamiento, T = tarea normal, P = motivos personales
   -- (se escriben inline con jsonb_build_object)

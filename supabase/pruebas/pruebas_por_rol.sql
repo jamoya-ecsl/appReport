@@ -82,7 +82,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    new_op := guardar_parte(null, jsonb_build_object('fecha','2099-01-05','h_ent','08:00','h_sal','16:00','t_alm','30 minutes'), lin);
+    new_op := guardar_parte(null, jsonb_build_object('fecha','2099-01-05','h_ent','08:00','h_sal','16:00','t_alm','30 minutes','t_com','0 minutes'), lin);
     select 'creado_por='||creado_por||' estado='||estado||' tot_horas='||tot_horas||' lineas='||(select count(*) from partes_det d where d.id_parte=new_op)
       into x from partes_cab where id_parte=new_op;
     reset role; res := res || to_jsonb('O05 operario guarda su parte con guardar_parte: OK '||x);
@@ -268,7 +268,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    perform guardar_parte(new_op, jsonb_build_object('fecha','2099-01-05','h_ent','08:00','h_sal','16:00','t_alm','30 minutes','obs','corregido por admin'), lin);
+    perform guardar_parte(new_op, jsonb_build_object('fecha','2099-01-05','h_ent','08:00','h_sal','16:00','t_alm','30 minutes','t_com','0 minutes','obs','corregido por admin'), lin);
     select 'edita aprobado='||estado||'/'||coalesce(obs,'null') into x from partes_cab where id_parte=new_op;
     tmp := guardar_parte(null, jsonb_build_object('operario','T003','fecha','2099-01-14','h_ent','08:00','h_sal','16:00'), lin);
     x := x||' crea parte de T003=OK';

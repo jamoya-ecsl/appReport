@@ -19,7 +19,7 @@ begin
   select cod_fin into f1 from fincas where activo order by cod_fin limit 1;
   select id_mat into v1 from vehiculos where activo order by id_mat limit 1;
   select cod_tar into t1 from tareas where activo and tipo = 'POR HORAS' order by cod_tar limit 1;
-  cab := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes');
+  cab := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes','t_com','0 minutes');  -- comida 0 explícita (012)
   lin := jsonb_build_array(
     jsonb_build_object('tarea','TD001','finca',f1,'vehiculo',v1,'h_ini','07:00','h_fin','07:30'),
     jsonb_build_object('tarea',t1,'finca',f1,'h_ini','07:30','h_fin','12:00'));

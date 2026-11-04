@@ -6,6 +6,7 @@ import {
   ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable,
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
+  VALORES_INICIALES, conValoresIniciales,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -361,9 +362,12 @@ async function viewForm(id) {
       return;
     }
   }
+  // Valores iniciales (012): se proponen al crear y se usan si un campo se deja vacío.
+  let ini = VALORES_INICIALES;
+  try { ini = (await st.api.getValoresIniciales()) || ini; } catch { /* se usan los de rules.js */ }
   const cab = p || {
-    operario: u.cod_ope, fecha: new Date().toISOString().slice(0, 10), h_ent: '07:30', h_sal: '16:00',
-    t_alm_min: 30, t_com_min: 0, h_ext: 0, h_ext_manual: false, mat_nave: false, obs: '',
+    operario: u.cod_ope, fecha: new Date().toISOString().slice(0, 10), h_ent: ini.h_ent, h_sal: ini.h_sal,
+    t_alm_min: ini.t_alm_min, t_com_min: ini.t_com_min, h_ext: 0, h_ext_manual: false, mat_nave: false, obs: '',
   };
   const { cat } = st;
   // Horas extra (011): las calcula la BD. Solo el ADMIN ve th_jornada y puede corregirlas a mano.
@@ -384,10 +388,13 @@ async function viewForm(id) {
           ? `<select name="operario">${options(st.operarios.filter((o) => o.activo), cab.operario, 'cod_ope', (o) => o.usuario)}</select>`
           : `<input value="${esc(nombreOperario(cab.operario))}" disabled><input type="hidden" name="operario" value="${esc(cab.operario)}">`}</label>
         <label>Fecha <input type="date" name="fecha" value="${esc(cab.fecha)}" required></label>
-        <label>Hora entrada <input type="time" step="900" name="h_ent" value="${esc(cab.h_ent)}" required></label>
-        <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}" required></label>
-        <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}"></label>
-        <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}"></label>
+        <label>Hora entrada <input type="time" step="900" name="h_ent" value="${esc(cab.h_ent)}"></label>
+        <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}"></label>
+        <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}" placeholder="${esc(ini.t_alm_min)}"></label>
+        <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}" placeholder="${esc(ini.t_com_min)}"></label>
+        <p class="muted wide">Si dejas vacía la entrada, la salida, el almuerzo o la comida, se usa el valor por defecto:
+          ${esc(ini.h_ent)} – ${esc(ini.h_sal)}, ${esc(ini.t_alm_min)} min de almuerzo y ${esc(ini.t_com_min)} de comida.
+          Si no has parado, escribe 0.</p>
         ${esAdmin ? `
         <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}" ${cab.h_ext_manual ? '' : 'disabled'}>
           <span class="muted" id="hext-auto"></span></label>
@@ -463,7 +470,7 @@ async function viewForm(id) {
     refrescar();
   };
   function refrescar() {
-    const datos = Object.fromEntries(new FormData(form));
+    const datos = conValoresIniciales(Object.fromEntries(new FormData(form)), ini);
     const tot = calcTotHoras(datos);
     main.querySelector('#tot').textContent = fmtHoras(tot);
     if (esAdmin) {
@@ -498,8 +505,10 @@ async function viewForm(id) {
     ev.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
     const nuevaCab = {
-      operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent, h_sal: fd.h_sal,
-      t_alm_min: Number(fd.t_alm_min) || 0, t_com_min: Number(fd.t_com_min) || 0,
+      // Vacío se envía vacío: la BD pone el valor de la configuración (012).
+      operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent || null, h_sal: fd.h_sal || null,
+      t_alm_min: fd.t_alm_min === '' ? null : Number(fd.t_alm_min),
+      t_com_min: fd.t_com_min === '' ? null : Number(fd.t_com_min),
       mat_nave: form.mat_nave.checked, obs: fd.obs,
     };
     // Solo el ADMIN envía horas extra corregidas; para el resto la BD las calcula.
@@ -509,7 +518,8 @@ async function viewForm(id) {
     }
     const nuevasLineas = leerLineas();
     const msg = main.querySelector('#form-msg');
-    const errores = validarParte(nuevaCab, nuevasLineas, cat);
+    // Se valida con los valores que guardará la BD (los vacíos ya sustituidos).
+    const errores = validarParte(conValoresIniciales(nuevaCab, ini), nuevasLineas, cat);
     if (errores.length) {
       msg.innerHTML = `<div class="state state-error" role="alert"><strong>Revisa el formulario:</strong><ul>${errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
       msg.scrollIntoView({ behavior: 'smooth', block: 'center' });

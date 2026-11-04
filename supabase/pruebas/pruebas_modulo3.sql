@@ -14,9 +14,15 @@ declare
   f1 text; v1 text; t1 text; n int; x text;
   id1 uuid; id2 uuid; id3 uuid; id4 uuid; id5 uuid;
   -- Jornadas: 07:00–15:00 con 30 min de almuerzo = 7,5 h; 07:00–17:00 = 9,5 h
-  c75 jsonb := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes');
-  c95 jsonb := jsonb_build_object('h_ent','07:00','h_sal','17:00','t_alm','30 minutes');
+  -- (comida 0 explícita: desde la 012 una comida que no se envía toma el valor de la configuración)
+  c75 jsonb := jsonb_build_object('h_ent','07:00','h_sal','15:00','t_alm','30 minutes','t_com','0 minutes');
+  c95 jsonb := jsonb_build_object('h_ent','07:00','h_sal','17:00','t_alm','30 minutes','t_com','0 minutes');
 begin
+  -- Desde la 012: las cuentas de estas pruebas suponen th_jornada = 8. Se fija sin sesión
+  -- (como el SQL Editor) y se deshace al final con todo lo demás.
+  perform set_config('request.jwt.claims','',true);
+  update configuracion set valor = '8' where clave = 'th_jornada';
+
   select cod_fin into f1 from fincas where activo order by cod_fin limit 1;
   select id_mat into v1 from vehiculos where activo order by id_mat limit 1;
   select cod_tar into t1 from tareas where activo and tipo = 'POR HORAS' order by cod_tar limit 1;
@@ -162,7 +168,9 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    select count(*) into n from auditoria where tabla = 'configuracion' and accion = 'MODIFICACION';
+    -- Solo los cambios del admin en esta prueba (desde la 012 hay otras modificaciones anteriores).
+    select count(*) into n from auditoria where tabla = 'configuracion' and accion = 'MODIFICACION'
+      and fecha = now() and usuario_email = 'soporte@escribanosl.es';
     x := 'admin='||n;
     perform set_config('request.jwt.claims',c_sup,true);
     select count(*) into n from auditoria where tabla = 'configuracion';

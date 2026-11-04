@@ -139,13 +139,22 @@ export function createSupabaseApi(cfg) {
       return r ? Number(r.valor) : null;
     },
 
+    // Valores iniciales del parte (migración 012): los puede leer cualquier rol.
+    // → { h_ent: '07:30', h_sal: '18:00', t_alm_min: 30, t_com_min: 90 }
+    async getValoresIniciales() {
+      return ok(await sb.rpc('valores_iniciales_parte'));
+    },
+
     // Única vía de escritura de partes y líneas: guardar_parte() (migración 009).
     // La BD valida el parte completo (jornada, solapes, desplazamientos, 15 minutos) y calcula h_ext
     // (solo respeta h_ext / h_ext_manual si los envía un ADMIN; migración 011).
+    // Desde la 012, entrada, salida, almuerzo o comida vacíos se envían vacíos (null) y la BD pone el
+    // valor de la configuración; 0 minutos se envía como 0.
     async saveParte({ id_parte, cab, lineas }) {
+      const min = (v) => (v == null || v === '' ? null : `${Number(v)} minutes`);
       return ok(await sb.rpc('guardar_parte', {
         p_id_parte: id_parte || null,
-        p_cab: { ...cab, t_alm: `${Number(cab.t_alm_min) || 0} minutes`, t_com: `${Number(cab.t_com_min) || 0} minutes` },
+        p_cab: { ...cab, h_ent: cab.h_ent || null, h_sal: cab.h_sal || null, t_alm: min(cab.t_alm_min), t_com: min(cab.t_com_min) },
         p_lineas: lineas,
       }));
     },

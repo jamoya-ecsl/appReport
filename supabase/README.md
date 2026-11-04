@@ -20,6 +20,10 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `010a_estado_cerrado.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial) | Añade el estado `Cerrado` |
 | `010_estados_y_funciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 32/32 con `pruebas/pruebas_modulo2.sql` | Módulo 2: Pendiente → Cerrado → Aprobado/Rechazado sin vuelta atrás; `cerrar_parte()`, `revisar_parte()`, `borrar_parte()`; sin escritura directa en `partes_cab` |
 | `011_configuracion_y_horas_extra.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 19/19 con `pruebas/pruebas_modulo3.sql` | Módulo 3: tabla `configuracion` (`th_jornada` = 8, solo ADMIN), `h_ext` calculado por la BD (corrección manual solo ADMIN), `ht_tareas` al consultar |
+| `012_valores_iniciales.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo4.sql` | Módulo 4: valores iniciales del parte en `configuracion` (`cfh_ent` 07:30, `cfh_sal` 18:00, `cft_alm` 30, `cft_com` 90), `valores_iniciales_parte()` para todos los roles, campos vacíos → valor de la configuración en `guardar_parte()`; `th_jornada` = 8,5 |
+
+Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
+`docs/DECISIONES_MODULOS_4_A_8.md`.
 
 El conector de Supabase usado desde Claude Code bloquea las sentencias con `DELETE`/`DROP`/`UPDATE`;
 por eso 004b y 007b se ejecutaron en Dashboard → SQL Editor. Lo ejecutado desde el SQL Editor no queda en
@@ -68,6 +72,11 @@ Reglas que impone la BD (no solo la interfaz):
 - **Selectores de partes**: catálogos con `.eq('activo', true)`; para mostrar partes antiguos, leer sin filtro.
 - **Guardar parte**: `rpc('guardar_parte', { p_id_parte: null | uuid, p_cab: {...}, p_lineas: [...] })`
   (`t_alm`/`t_com` como intervalo, p. ej. `'30 minutes'`; líneas con `id_linea` se actualizan, sin él se crean).
+  (012) `p_cab` va siempre completo: `h_ent`, `h_sal`, `t_alm` o `t_com` vacíos o ausentes toman el valor de la
+  configuración, al crear y al editar; 0 minutos se envía como `'0 minutes'`.
+- **Valores iniciales del formulario** (012): `rpc('valores_iniciales_parte')` → `{h_ent, h_sal, t_alm_min, t_com_min}`,
+  para cualquier rol. La tabla `configuracion` (incluidos estos valores y `th_jornada`) solo la lee y modifica el ADMIN:
+  `update configuracion set valor = '08:00' where clave = 'cfh_ent'`.
 - **Cerrar**: `rpc('cerrar_parte', { p_id_parte })`. **Aprobar/rechazar**: `rpc('revisar_parte', { p_id_parte, p_estado: 'Aprobado' | 'Rechazado', p_comentario })`.
   **Borrar** (ADMIN): `rpc('borrar_parte', { p_id_parte })`, deja copia en `auditoria`. La BD sella quién y cuándo cierra y revisa.
   Estados: Pendiente → Cerrado → Aprobado | Rechazado, sin vuelta atrás (también desde el SQL Editor).
@@ -102,3 +111,8 @@ y las del módulo 3 en `pruebas/pruebas_modulo3.sql` (19/19 el 28/10).
 `pruebas_por_rol.sql`: 31/31 con la 009 y 32/32 con la 010 y con la 011 (28/10).
 `pruebas_modulo1.sql` con la 011: 31/31 (M19 había quedado anticuada por la 010, porque el UPDATE directo ya afecta
 a 0 filas; se reescribió como M19 por la API, 0 filas, y M19b desde el SQL Editor, bloqueado por la validación del parte).
+Para la 012 (04/11): `pruebas_modulo4.sql` (18 casos, nuevo). Los demás scripts envían la comida a 0 de forma explícita
+(desde la 012 una comida vacía vale 90 min) y `pruebas_modulo3.sql` fija `th_jornada` = 8 al empezar, para que sus
+resultados no dependan de la configuración; funcionan antes y después de la 012.
+Resultados con la 012 aplicada (04/11): módulo 4 18/18, módulo 3 19/19, módulo 1 32/32 (el recuento real del script
+es 32: M01–M22 con M19b, S01–S04, O01–O02 y D01–D03), módulo 2 32/32 y por rol 32/32.

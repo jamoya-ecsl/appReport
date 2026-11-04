@@ -4,10 +4,10 @@
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
-  calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas,
+  calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v4';  // v4: configuración th_jornada y h_ext_manual (migración 011)
+const KEY = 'pt-demo-v5';  // v5: valores iniciales y jornada de 8,5 h (migración 012)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -94,7 +94,9 @@ function semilla() {
     L(11, 'demo-4', 'TD901', 'FD3', null, '08:00', '08:30', null, 'DEMO-0002'),
     L(12, 'demo-4', 'TT902', 'FD3', null, '08:30', '15:00', null, 'DEMO-0002'),
   ];
-  return { partes, lineas, seq: 4, cod: null, config: { th_jornada: 8 } };
+  // Como la tabla configuracion (011 y 012).
+  const config = { th_jornada: 8.5, cfh_ent: '07:30', cfh_sal: '18:00', cft_alm: 30, cft_com: 90 };
+  return { partes, lineas, seq: 4, cod: null, config };
 }
 
 function cargar() {
@@ -116,6 +118,8 @@ export function createMockApi(reason) {
   });
   const lineaConHoras = (l) => ({ ...l, t_horas: calcHoras(l.h_ini, l.h_fin) });
   const exigirSesion = () => { if (!yo()) throw new Error('Sesión no iniciada.'); };
+  const valoresIniciales = () => ({ h_ent: db.config.cfh_ent, h_sal: db.config.cfh_sal,
+    t_alm_min: db.config.cft_alm, t_com_min: db.config.cft_com });
 
   return {
     mode: 'demo',
@@ -132,6 +136,8 @@ export function createMockApi(reason) {
 
     // Como la tabla configuracion (011): solo el ADMIN la ve.
     async getThJornada() { exigirSesion(); return yo().rol_app === 'ADMIN' ? db.config.th_jornada : null; },
+    // Como valores_iniciales_parte() (012): cualquier rol lee estos 4 valores.
+    async getValoresIniciales() { exigirSesion(); return valoresIniciales(); },
 
     async listPartes(f = {}) {
       exigirSesion();
@@ -156,10 +162,12 @@ export function createMockApi(reason) {
       return { ...conHoras(p), lineas: ordenarLineas(lineasDe(id)).map(lineaConHoras) };
     },
 
-    async saveParte({ id_parte, cab, lineas }) {
+    async saveParte({ id_parte, cab: cabEnviada, lineas }) {
       exigirSesion();
       await wait(400);
       const u = yo();
+      // Igual que guardar_parte() desde la 012: campos vacíos → valores de la configuración.
+      const cab = conValoresIniciales(cabEnviada, valoresIniciales());
       let p;
       if (id_parte) {
         p = db.partes.find((x) => x.id_parte === id_parte);
