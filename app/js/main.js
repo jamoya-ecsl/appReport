@@ -7,6 +7,7 @@ import {
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
   VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
+  requiereFinVuelta, textoFinVuelta, errorFinVuelta,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -269,11 +270,14 @@ async function viewDetalle(id) {
     </dl></section>
     <section class="card"><h2>Tareas realizadas (${p.lineas.length})</h2>
       ${p.lineas.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Tarea</th><th>Finca</th><th>Parcela</th><th>Vehículo</th><th>Apero</th><th>Horario</th><th>Horas</th><th>Obs.</th></tr></thead>
+        <thead><tr><th>Tarea</th><th>Finca</th><th>Parcela</th><th>Vehículo</th><th>Apero</th><th>Horario</th><th>Horas</th><th>Fin de vuelta</th><th>Obs.</th></tr></thead>
         <tbody>${ordenarLineas(p.lineas).map((l) => `<tr>
           <td>${esc(nombreTarea(l.tarea))}</td><td>${esc(nombreFinca(l.finca))}</td><td>${esc(nombreParcela(l.parcela))}</td>
           <td>${esc(nombreVehiculo(l.vehiculo))}</td><td>${esc(nombreApero(l.apero))}</td>
-          <td>${esc(l.h_ini)}–${esc(l.h_fin)}</td><td>${fmtHoras(l.t_horas ?? calcHoras(l.h_ini, l.h_fin))}</td><td>${esc(l.obs || '')}</td></tr>`).join('')}
+          <td>${esc(l.h_ini)}–${esc(l.h_fin)}</td><td>${fmtHoras(l.t_horas ?? calcHoras(l.h_ini, l.h_fin))}</td>
+          <td>${requiereFinVuelta(l, st.cat) && l.fin_vuelta == null
+            ? '<strong class="pendiente">Sin responder</strong>' : esc(textoFinVuelta(l, st.cat))}</td>
+          <td>${esc(l.obs || '')}</td></tr>`).join('')}
         </tbody></table></div>` : emptyHtml('Este parte no tiene líneas de tarea.')}
     </section>
     <section class="card"><h2>Cierre y revisión</h2><dl class="grid">
@@ -300,7 +304,7 @@ async function viewDetalle(id) {
 
   const accMsg = main.querySelector('#acc-msg');
   main.querySelector('#b-cerrar')?.addEventListener('click', async (ev) => {
-    const err = errorCierre(p, p.lineas.length);
+    const err = errorCierre(p, p.lineas.length) || errorFinVuelta(p.lineas, st.cat);
     if (err) { accMsg.innerHTML = errorHtml(new Error(err), { retry: false }); return; }
     const b = ev.currentTarget;
     if (!confirm(`¿Cerrar el parte nº ${p.num_parte}? Después no se podrá reabrir${esGestor(u) ? '' : ' ni editar'}.`)) return;
@@ -432,6 +436,10 @@ async function viewForm(id) {
       <label data-campo>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
       <label data-campo><span class="lbl-veh">Vehículo</span> <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
       <label data-campo>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
+      <label data-vuelta>Fin de vuelta <select name="fin_vuelta">
+        <option value="" ${l.fin_vuelta == null ? 'selected' : ''}>— Sin responder —</option>
+        <option value="true" ${l.fin_vuelta === true ? 'selected' : ''}>Sí, termina la vuelta</option>
+        <option value="false" ${l.fin_vuelta === false ? 'selected' : ''}>No</option></select></label>
       <label>Inicio <input type="time" step="900" name="h_ini" value="${esc(l.h_ini || '')}"></label>
       <label>Fin <input type="time" step="900" name="h_fin" value="${esc(l.h_fin || '')}"></label>
       <label class="wide">Obs. <input name="l_obs" value="${esc(l.obs || '')}"></label>
@@ -448,13 +456,20 @@ async function viewForm(id) {
       if (personal) lab.querySelector('select').value = '';
     });
     fs.querySelector('.lbl-veh').textContent = tipo === TIPO_DESPLAZAMIENTO ? 'Vehículo (obligatorio)' : 'Vehículo';
+    // Fin de vuelta (014): solo en tareas con parcela y de tipo POR SUPERFICIE o POR HORAS.
+    fs.querySelector('[data-vuelta]').hidden = !requiereFinVuelta(
+      { tarea: fs.querySelector('[name=tarea]').value, parcela: fs.querySelector('[name=parcela]').value }, cat);
   }
   const leerLineas = () => [...cont.querySelectorAll('.linea')].map((f) => {
     const v = (n) => f.querySelector(`[name=${n}]`).value;
     const personal = tipoTarea(cat, v('tarea')) === TIPO_PERSONAL;
     const opcional = (n) => (personal ? null : v(n) || null);
-    return { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
+    const l = { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
       vehiculo: opcional('l_vehiculo'), apero: opcional('apero'), h_ini: v('h_ini'), h_fin: v('h_fin'), obs: v('l_obs') };
+    // Sí / No / sin responder; en las tareas a las que no se aplica, No (como la BD).
+    const fv = v('fin_vuelta');
+    l.fin_vuelta = requiereFinVuelta(l, cat) ? (fv === 'true' ? true : fv === 'false' ? false : null) : false;
+    return l;
   });
   // Valores propuestos para una línea nueva (se pueden cambiar): empieza cuando acaba la última tarea
   // y repite finca, vehículo y apero de la última tarea que los tenga.
@@ -493,11 +508,11 @@ async function viewForm(id) {
   });
   cont.addEventListener('change', (ev) => {
     const fs = ev.target.closest('.linea');
-    if (ev.target.name === 'tarea') aplicarTipo(fs);
     // Parcela dependiente de la finca de la línea
     if (ev.target.name === 'l_finca') {
       fs.querySelector('[name=parcela]').innerHTML = options(parcelasDe(ev.target.value), '', 'cod_par', etiquetaParcela, '— Sin parcela —');
     }
+    if (['tarea', 'l_finca', 'parcela'].includes(ev.target.name)) aplicarTipo(fs);
   });
   form.addEventListener('input', refrescar);
 
@@ -522,6 +537,10 @@ async function viewForm(id) {
     const errores = validarParte(conValoresIniciales(nuevaCab, ini), nuevasLineas, cat);
     const sinTareas = errorSinTareas(p?.estado, nuevaCab.mat_nave, nuevasLineas.length);
     if (sinTareas) errores.push(`${sinTareas}.`);
+    // Un parte ya cerrado no puede quedar con tareas sin responder (014). En Pendiente se permite.
+    const sinResponder = p && p.estado !== 'Pendiente'
+      ? errorFinVuelta(nuevasLineas, cat, `El parte está ${p.estado}: indica si termina la vuelta en`) : null;
+    if (sinResponder) errores.push(`${sinResponder}.`);
     if (errores.length) {
       msg.innerHTML = `<div class="state state-error" role="alert"><strong>Revisa el formulario:</strong><ul>${errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
       msg.scrollIntoView({ behavior: 'smooth', block: 'center' });

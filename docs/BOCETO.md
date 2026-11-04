@@ -51,6 +51,9 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
   para no tener pausa hay que escribir 0. Con esos valores un parte sale con 8,5 h y 0 horas extra.
 - "Horas de tareas" (`ht_tareas`): suma de las tareas sin MOTIVOS PERSONALES, calculada al consultar.
 - ADMIN y SUPERVISOR pueden crear un parte a nombre de otro operario (solo operarios activos).
+- Fin de vuelta (migración 014): en las tareas con parcela y de tipo POR SUPERFICIE o POR HORAS aparece "Fin de vuelta"
+  (Sí / No / sin responder). Se puede guardar sin responder, pero no cerrar; en un parte ya cerrado no se puede dejar sin
+  responder. En el resto de tareas no se pregunta y se guarda No. El detalle muestra la columna "Fin de vuelta".
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
 

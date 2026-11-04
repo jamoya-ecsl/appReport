@@ -121,6 +121,29 @@ export const calcHtTareas = (lineas, cat) => r2(lineas
 
 export const tipoTarea = (cat, codTar) => cat.tareas.find((t) => t.cod_tar === codTar)?.tipo || null;
 
+// fin_vuelta (migración 014): Sí (true) / No (false) / sin responder (null). Solo se pregunta en tareas con
+// parcela y de tipo POR SUPERFICIE o POR HORAS (como requiere_fin_vuelta() de la BD); en el resto es No.
+const TIPOS_CON_VUELTA = ['POR SUPERFICIE (HAS)', 'POR HORAS'];
+export const requiereFinVuelta = (l, cat) => !!l.parcela && TIPOS_CON_VUELTA.includes(tipoTarea(cat, l.tarea));
+
+// Como el disparador tg_partes_det_fin_vuelta: en las tareas a las que no se aplica se guarda No.
+export const normalizarFinVuelta = (l, cat) =>
+  ({ ...l, fin_vuelta: requiereFinVuelta(l, cat) ? (l.fin_vuelta ?? null) : false });
+
+export const textoFinVuelta = (l, cat) => {
+  if (!requiereFinVuelta(l, cat)) return '—';
+  return l.fin_vuelta === true ? 'Sí' : l.fin_vuelta === false ? 'No' : 'Sin responder';
+};
+
+// Tareas sin responder, con el mismo formato que fin_vuelta_pendientes() de la BD; null si no hay.
+export function errorFinVuelta(lineas, cat, inicio = 'Para cerrar el parte indica si termina la vuelta en') {
+  const pend = ordenarLineas(lineas).filter((l) => requiereFinVuelta(l, cat) && l.fin_vuelta == null);
+  if (!pend.length) return null;
+  const nombre = (lista, campo, cod, txt) => cat[lista].find((x) => x[campo] === cod)?.[txt] || cod;
+  return `${inicio}: ${pend.map((l) => `${hhmm(l.h_ini)}–${hhmm(l.h_fin)} (${nombre('tareas', 'cod_tar', l.tarea, 'tareas')}, `
+    + `parcela ${nombre('parcelas', 'cod_par', l.parcela, 'nom_parc')})`).join('; ')}`;
+}
+
 export const etiquetaTipo = (tipo) => ({
   'POR HORAS': 'h', 'POR SUPERFICIE (HAS)': 'ha', [TIPO_DESPLAZAMIENTO]: 'desplazamiento', [TIPO_PERSONAL]: 'personal',
 }[tipo] || '');

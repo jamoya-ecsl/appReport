@@ -23,6 +23,7 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `012_valores_iniciales.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo4.sql` | Módulo 4: valores iniciales del parte en `configuracion` (`cfh_ent` 07:30, `cfh_sal` 18:00, `cft_alm` 30, `cft_com` 90), `valores_iniciales_parte()` para todos los roles, campos vacíos → valor de la configuración en `guardar_parte()`; `th_jornada` = 8,5 |
 
 | `013_supervisor_y_auditoria_partes.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo5.sql` | Módulo 5: el SUPERVISOR crea partes para cualquier operario activo y corrige los Pendientes y Cerrados; titular activo obligatorio; un parte no Pendiente sin nave conserva al menos una tarea; auditoría de `partes_cab` y `partes_det` (registro = nº de parte); `borrar_parte()` deja la copia por disparador |
+| `014_fin_vuelta.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 10/10 con `pruebas/pruebas_modulo6.sql` | Módulo 6: `partes_det.fin_vuelta` (Sí/No/sin responder) en tareas con parcela y tipo POR SUPERFICIE o POR HORAS (en el resto, No); obligatoria al cerrar y en partes ya cerrados; `requiere_fin_vuelta(partes_det)` para la app |
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
@@ -81,6 +82,9 @@ Reglas que impone la BD (no solo la interfaz):
   (`t_alm`/`t_com` como intervalo, p. ej. `'30 minutes'`; líneas con `id_linea` se actualizan, sin él se crean).
   (012) `p_cab` va siempre completo: `h_ent`, `h_sal`, `t_alm` o `t_com` vacíos o ausentes toman el valor de la
   configuración, al crear y al editar; 0 minutos se envía como `'0 minutes'`.
+- **Fin de vuelta** (014): cada línea de `guardar_parte` lleva `fin_vuelta` (`true` / `false` / `null` = sin responder).
+  Para saber en qué tareas preguntarlo: `partes_det(*, requiere_fin_vuelta)`; en las demás la BD guarda `false`.
+  Cerrar exige respuesta en todas las que la requieren; el error dice cuáles faltan.
 - **Valores iniciales del formulario** (012): `rpc('valores_iniciales_parte')` → `{h_ent, h_sal, t_alm_min, t_com_min}`,
   para cualquier rol. La tabla `configuracion` (incluidos estos valores y `th_jornada`) solo la lee y modifica el ADMIN:
   `update configuracion set valor = '08:00' where clave = 'cfh_ent'`.
@@ -124,6 +128,11 @@ Para la 012 (04/11): `pruebas_modulo4.sql` (18 casos, nuevo). Los demás scripts
 resultados no dependan de la configuración; funcionan antes y después de la 012.
 Para la 013: `pruebas_modulo5.sql` (18 casos, nuevo); en `pruebas_modulo1.sql`, S02 y S03 pasan a "OK" (el supervisor
 corrige partes en Pendiente; antes de la 013 salen bloqueadas).
+Para la 014: `pruebas_modulo6.sql` (10 casos, nuevo); en `pruebas_por_rol.sql` la línea de ejemplo lleva `fin_vuelta = false`
+(tiene parcela y se cierra); funciona antes y después de la 014.
+Resultados con la 014 aplicada (04/11): módulo 6 10/10, por rol 32/32, módulo 1 32/32, módulo 2 32/32, módulo 3 19/19, módulo 4 18/18 y módulo 5 18/18.
+(Los módulos 2 y 4 se ejecutaron desde Claude Code; el conector rechaza los scripts que contienen DELETE, por eso
+los módulos 1, 3 y 5 se ejecutaron en el SQL Editor.)
 Resultados con la 013 aplicada (04/11): módulo 5 18/18, módulo 4 18/18, módulo 3 19/19, módulo 2 32/32 (D06: una sola
 copia en auditoría con sus 2 tareas), módulo 1 32/32 y por rol 32/32.
 Resultados con la 012 aplicada (04/11): módulo 4 18/18, módulo 3 19/19, módulo 1 32/32 (el recuento real del script

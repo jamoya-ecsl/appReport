@@ -4,10 +4,11 @@
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
+  normalizarFinVuelta, errorFinVuelta,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v5';  // v5: valores iniciales y jornada de 8,5 h (migración 012)
+const KEY = 'pt-demo-v6';  // v6: fin_vuelta en las tareas (migración 014)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -92,8 +93,11 @@ function semilla() {
     L(9, 'demo-3', 'TD901', 'FD3', null, '12:30', '13:00'),
     L(10, 'demo-3', 'TT902', 'FD3', 'PD05', '13:00', '16:00'),
     L(11, 'demo-4', 'TD901', 'FD3', null, '08:00', '08:30', null, 'DEMO-0002'),
-    L(12, 'demo-4', 'TT902', 'FD3', null, '08:30', '15:00', null, 'DEMO-0002'),
+    L(12, 'demo-4', 'TT902', 'FD3', 'PD05', '08:30', '15:00', null, 'DEMO-0002'),
   ];
+  // fin_vuelta (014): respuestas de las tareas con parcela; la del parte Pendiente (l-12) queda sin responder.
+  const respuestas = { 'l-2': true, 'l-3': false, 'l-7': false, 'l-10': true };
+  lineas.forEach((l, i) => { lineas[i] = normalizarFinVuelta({ ...l, fin_vuelta: respuestas[l.id_linea] ?? null }, CATALOGOS); });
   // Como la tabla configuracion (011 y 012).
   const config = { th_jornada: 8.5, cfh_ent: '07:30', cfh_sal: '18:00', cft_alm: 30, cft_com: 90 };
   return { partes, lineas, seq: 4, cod: null, config };
@@ -162,7 +166,9 @@ export function createMockApi(reason) {
       return { ...conHoras(p), lineas: ordenarLineas(lineasDe(id)).map(lineaConHoras) };
     },
 
-    async saveParte({ id_parte, cab: cabEnviada, lineas }) {
+    async saveParte({ id_parte, cab: cabEnviada, lineas: lineasEnviadas }) {
+      // Como tg_partes_det_fin_vuelta (014): en las tareas a las que no se aplica, No.
+      const lineas = lineasEnviadas.map((l) => normalizarFinVuelta(l, CATALOGOS));
       exigirSesion();
       await wait(400);
       const u = yo();
@@ -173,7 +179,8 @@ export function createMockApi(reason) {
         p = db.partes.find((x) => x.id_parte === id_parte);
         // Como guardar_parte() desde la 013: el SUPERVISOR corrige Pendientes y Cerrados.
         if (!p || !visible(p) || !puedeEditar(u, p)) throw new Error('Parte no encontrado o sin permiso para editarlo');
-        const e = errorSinTareas(p.estado, cab.mat_nave, lineas.length);
+        const e = errorSinTareas(p.estado, cab.mat_nave, lineas.length)
+          || (p.estado !== 'Pendiente' ? errorFinVuelta(lineas, CATALOGOS, `El parte está ${p.estado}: indica si termina la vuelta en`) : null);
         if (e) throw new Error(e);
       } else {
         if (cab.operario !== u.cod_ope && !puedeCrearParaOtros(u)) {
@@ -224,7 +231,7 @@ export function createMockApi(reason) {
       if (!puedeCerrar(u, p)) throw new Error('Parte no encontrado o sin permiso para cerrarlo');
       const errores = validarParte(p, lineasDe(id), CATALOGOS);
       if (errores.length) throw new Error(errores[0]);
-      const e = errorCierre(p, lineasDe(id).length);
+      const e = errorCierre(p, lineasDe(id).length) || errorFinVuelta(lineasDe(id), CATALOGOS);
       if (e) throw new Error(e);
       const ahora = new Date().toISOString();
       Object.assign(p, { estado: 'Cerrado', cerrado_por: u.cod_ope, fecha_cierre: ahora, fch_modificacion: ahora });

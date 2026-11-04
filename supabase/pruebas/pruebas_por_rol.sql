@@ -35,7 +35,7 @@ begin
   select id_mat into v1 from vehiculos where activo limit 1;
   -- Desplazamiento inicial (08:00–08:30) + una tarea en la misma finca (08:30–12:00)
   despl := jsonb_build_object('tarea','TD001','finca',f1,'vehiculo',v1,'h_ini','08:00','h_fin','08:30');
-  lin := jsonb_build_array(despl, jsonb_build_object('tarea',t1,'finca',f1,'parcela',p1,'h_ini','08:30','h_fin','12:00'));
+  lin := jsonb_build_array(despl, jsonb_build_object('tarea',t1,'finca',f1,'parcela',p1,'h_ini','08:30','h_fin','12:00','fin_vuelta',false));  -- fin_vuelta (014): sin él no se podría cerrar
 
   -- ===== SIN SESIÓN =====
   begin

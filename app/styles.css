@@ -64,6 +64,7 @@ dt { font-size: .78rem; color: var(--muted); } dd { margin: .1rem 0 0; }
 
 .badge { font-size: .75rem; font-weight: 600; padding: .15rem .5rem; border-radius: 999px; }
 .badge-pendiente { background: var(--warn-bg); color: var(--warn); }
+.pendiente { color: var(--warn); }
 .badge-cerrado { background: var(--info-bg); color: #2f5fa8; }
 .badge-aprobado { background: var(--ok-bg); color: var(--ok); }
 .badge-rechazado { background: var(--err-bg); color: var(--danger); }
