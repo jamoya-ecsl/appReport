@@ -40,7 +40,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
     select string_agg(clave||'='||valor, ' ' order by clave) into x from configuracion;
-    reset role; res := res || to_jsonb('V04 admin lee la configuración (esperado cfh_ent=07:30 cfh_sal=18:00 cft_alm=30 cft_com=90 th_jornada=8.5): '||x);
+    reset role; res := res || to_jsonb('V04 admin lee la configuración (esperado cfc_inicio=09-01 cfh_ent=07:30 cfh_sal=18:00 cft_alm=30 cft_com=90 th_jornada=8.5; cfc_inicio desde la 015): '||x);
   exception when others then res := res || to_jsonb('V04 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   -- ===== GUARDAR_PARTE CON CAMPOS VACÍOS =====

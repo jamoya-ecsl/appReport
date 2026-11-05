@@ -23,6 +23,7 @@ npm run dev          → http://localhost:5180
 Login ──► Inicio ──► Lista de partes ──► Detalle ──► Editar
             │            ▲  (filtros)       │
             └──► Nuevo parte ───────────────┘ (al guardar va al detalle)
+            └──► Vueltas y archivo (ADMIN y SUPERVISOR)
 ```
 | Pantalla | Ruta | Quién | Qué hace |
 |---|---|---|---|
@@ -32,6 +33,7 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, cierre y revisión. Cerrar (si está Pendiente), Aprobar/Rechazar (gestor, si está Cerrado), Borrar (ADMIN) |
 | Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
 | Editar | `#/partes/:id/editar` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Mismo formulario |
+| Vueltas y archivo | `#/archivo` | ADMIN y SUPERVISOR | Vueltas por parcela y tarea (filtros campaña y estado, CSV); CSV de horas por trabajador y de tareas realizadas por fechas; archivar hasta una fecha (solo ADMIN) e historial de archivados |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
 
@@ -54,6 +56,15 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 - Fin de vuelta (migración 014): en las tareas con parcela y de tipo POR SUPERFICIE o POR HORAS aparece "Fin de vuelta"
   (Sí / No / sin responder). Se puede guardar sin responder, pero no cerrar; en un parte ya cerrado no se puede dejar sin
   responder. En el resto de tareas no se pregunta y se guarda No. El detalle muestra la columna "Fin de vuelta".
+- Archivo y vueltas (migración 015):
+  - Vuelta = campaña + parcela + tarea; solo cuentan los partes Aprobados. La tarea marcada como fin de vuelta cierra la
+    vuelta en curso; si el mismo día hay registros sin fin, cuentan en la vuelta que se cierra. Cada campaña (año agrícola
+    desde el 1 de septiembre) empieza de cero.
+  - Archivar (solo ADMIN) hasta una fecha, como mucho ayer: no se puede si queda algún parte Pendiente o Cerrado en el
+    rango. Las tareas de los Aprobados pasan al archivo agrupadas (sin MOTIVOS PERSONALES ni DESPLAZAMIENTO) y los partes se
+    borran; los Rechazados se borran sin archivar. Después no se pueden crear ni modificar partes de esas fechas.
+  - Las horas por trabajador se exportan antes de archivar: después ya no están.
+  - Los CSV usan `;` y coma decimal para abrirlos en Excel en español.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
 
@@ -67,7 +78,8 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 | Almuerzo / comida | Se piden en minutos y se guardan como `interval` |
 
 ## Fuera de alcance (existe en el diseño, no en el boceto)
-Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admin), "Mi perfil", informes, fotos y GPS, notificaciones y PDF.
+Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admin), pantalla de configuración, "Mi perfil", fotos y GPS,
+notificaciones y PDF (módulo 8, migración 016).
 
 ## Archivos del boceto
 | Archivo | Función |
@@ -82,7 +94,7 @@ Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admi
 | `scripts/serve.mjs` | Servidor local sin dependencias; no envía nunca claves secretas al navegador |
 
 ## Qué llevar a Lovable
-- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`) y los mensajes de error de `supabase.js`.
+- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`, `listVueltas`, `listTareasResumen`, `listHorasTrabajador`, `listArchivos`, `archivarPartes`) y los mensajes de error de `supabase.js`.
 - **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
 - **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.

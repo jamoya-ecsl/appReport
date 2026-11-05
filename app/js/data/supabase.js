@@ -1,4 +1,4 @@
-// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 011).
+// MODO SUPABASE — usa el esquema aplicado en Supabase (migraciones de supabase/propuesta/, 001 a 015).
 // Solo usa la clave PÚBLICA: los permisos reales los aplican las políticas RLS y los disparadores.
 // Login: email + contraseña o enlace mágico (Supabase Auth). El email debe existir en public.operarios y estar activo.
 
@@ -169,6 +169,38 @@ export function createSupabaseApi(cfg) {
     },
     async borrarParte(id) {
       ok(await sb.rpc('borrar_parte', { p_id_parte: id }));
+    },
+
+    // ---------- Archivo de tareas y vueltas (migración 015). Solo ADMIN y SUPERVISOR ven filas. ----------
+    // Vueltas: archivo + partes Aprobados aún sin archivar (vista vueltas).
+    async listVueltas(f = {}) {
+      let q = sb.from('vueltas').select('*')
+        .order('campana', { ascending: false }).order('parcela').order('tarea').order('num_vuelta');
+      if (f.campana) q = q.eq('campana', f.campana);
+      if (f.estado) q = q.eq('estado', f.estado);
+      return ok(await q);
+    },
+    // Tareas realizadas (vista tareas_resumen): misma fuente que las vueltas, fila a fila.
+    async listTareasResumen(f = {}) {
+      let q = sb.from('tareas_resumen').select('*').order('fec_tarea').order('num_parte');
+      if (f.desde) q = q.gte('fec_tarea', f.desde);
+      if (f.hasta) q = q.lte('fec_tarea', f.hasta);
+      return ok(await q);
+    },
+    // Horas por trabajador (vista horas_trabajador): solo existen mientras no se archivan los partes.
+    async listHorasTrabajador(f = {}) {
+      let q = sb.from('horas_trabajador').select('*').order('fecha').order('operario');
+      if (f.desde) q = q.gte('fecha', f.desde);
+      if (f.hasta) q = q.lte('fecha', f.hasta);
+      return ok(await q).map((r) => ({ ...r, h_ent: hhmm(r.h_ent), h_sal: hhmm(r.h_sal) }));
+    },
+    // Archivados hechos, el último primero.
+    async listArchivos() {
+      return ok(await sb.from('archivos_partes').select('*').order('hasta', { ascending: false }));
+    },
+    // Solo ADMIN. Devuelve { hasta, partes, lineas, filas, rechazados }.
+    async archivarPartes(hasta) {
+      return ok(await sb.rpc('archivar_partes', { p_hasta: hasta }));
     },
   };
 }

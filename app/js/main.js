@@ -1,5 +1,6 @@
 // Boceto funcional "Partes de Trabajo". Navegación por hash:
 //   #/login · #/inicio · #/partes?filtros · #/partes/nuevo · #/partes/:id · #/partes/:id/editar
+//   #/archivo?filtros (vueltas, exportaciones y archivo; solo ADMIN y SUPERVISOR)
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
 import {
@@ -7,7 +8,7 @@ import {
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
   VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
-  requiereFinVuelta, textoFinVuelta, errorFinVuelta,
+  requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -68,6 +69,7 @@ async function route() {
   if (parts[0] === 'partes' && parts[1] === 'nuevo') return viewForm(null);
   if (parts[0] === 'partes' && parts[2] === 'editar') return viewForm(parts[1]);
   if (parts[0] === 'partes') return viewDetalle(parts[1]);
+  if (parts[0] === 'archivo' && esGestor(st.user)) return viewArchivo(query);
   shell(emptyHtml('Esta pantalla no existe.', '<a class="button" href="#/inicio">Volver al inicio</a>'));
 }
 
@@ -89,6 +91,7 @@ function shell(html) {
           <a href="#/inicio" ${activo('inicio')}>Inicio</a>
           <a href="#/partes" ${activo('partes')}>${esGestor(u) ? 'Todos los partes' : 'Mis partes'}</a>
           <a href="#/partes/nuevo" ${activo('nuevo')}>+ Nuevo parte</a>
+          ${esGestor(u) ? `<a href="#/archivo" ${activo('archivo')}>Vueltas y archivo</a>` : ''}
         </nav>
         <div class="who">${esc(u.usuario)} <span class="rol">${esc(u.rol_app)}</span>
           <button class="link" data-action="logout">Salir</button></div>` : ''}
@@ -555,6 +558,144 @@ async function viewForm(id) {
     } catch (e) {
       msg.innerHTML = errorHtml(e, { retry: false });
       btn.disabled = false; btn.textContent = id ? 'Guardar cambios' : 'Crear parte';
+    }
+  });
+}
+
+// ---------- Vueltas, exportaciones y archivo (migración 015) ----------
+const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
+
+function descargarCsv(nombre, filas, columnas) {
+  const url = URL.createObjectURL(new Blob([aCsv(filas, columnas)], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const COLS_VUELTAS = [
+  ['campana', 'Campaña'], ['finca', 'Finca'], ['parcela', 'Parcela'], ['nom_parcela', 'Nombre parcela'],
+  ['tarea', 'Tarea'], ['nom_tarea', 'Nombre tarea'], ['num_vuelta', 'Vuelta'], ['estado', 'Estado'],
+  ['fecha_inicio', 'Inicio'], ['fecha_fin', 'Fin'], ['operario_fin', 'Operario que la termina'],
+  ['horas', 'Horas'], ['registros', 'Registros'], ['operarios', 'Operarios'], ['incluye_sin_archivar', 'Con partes sin archivar'],
+];
+const COLS_TAREAS = [
+  ['campana', 'Campaña'], ['operario', 'Operario'], ['fec_tarea', 'Fecha'], ['tarea', 'Tarea'], ['nom_tarea', 'Nombre tarea'],
+  ['finca', 'Finca'], ['parcela', 'Parcela'], ['vehiculo', 'Vehículo'], ['apero', 'Apero'], ['fin_vuelta', 'Fin de vuelta'],
+  ['horas', 'Horas'], ['num_parte', 'Parte'], ['origen', 'Origen'],
+];
+const COLS_HORAS = [
+  ['parte', 'Parte'], ['operario', 'Operario'], ['nombre', 'Nombre'], ['fecha', 'Fecha'], ['h_ent', 'Entrada'], ['h_sal', 'Salida'],
+  ['t_alm_min', 'Almuerzo (min)'], ['t_com_min', 'Comida (min)'], ['estado', 'Estado'],
+];
+
+async function viewArchivo(q) {
+  const u = st.user;
+  const admin = u.rol_app === 'ADMIN';
+  const main = shell(loadingHtml('Cargando vueltas…'));
+  let vueltas;
+  let archivos;
+  try {
+    [vueltas, archivos] = await Promise.all([st.api.listVueltas({}), st.api.listArchivos()]);
+  } catch (e) { return showError(main, e, () => viewArchivo(q)); }
+
+  const campanas = [...new Set(vueltas.map((v) => v.campana))].sort().reverse();
+  const lista = vueltas.filter((v) => (!q.campana || v.campana === q.campana) && (!q.estado || v.estado === q.estado));
+  const ult = archivos[0]?.hasta || null;
+
+  main.innerHTML = `
+    <div class="page-head"><h1>Vueltas y archivo</h1></div>
+
+    <section class="card"><div class="page-head"><h2>Vueltas por parcela y tarea</h2>
+        <button type="button" class="secondary" id="b-csv-vueltas" ${lista.length ? '' : 'disabled'}>Exportar CSV</button></div>
+      <p class="muted">Solo cuentan los partes Aprobados (archivados o no). Una vuelta se cierra con la tarea marcada como fin de vuelta;
+        cada campaña empieza de cero.</p>
+      <form id="f-vueltas" class="filters">
+        <label>Campaña <select name="campana"><option value="">Todas</option>${campanas.map((c) => `<option ${q.campana === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+        <label>Estado <select name="estado"><option value="">Todos</option>${['Abierta', 'Cerrada'].map((e) => `<option ${q.estado === e ? 'selected' : ''}>${e}</option>`).join('')}</select></label>
+        <a class="link" href="#/archivo">Limpiar</a>
+      </form>
+      ${lista.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Campaña</th><th>Parcela</th><th>Tarea</th><th>Vuelta</th><th>Estado</th><th>Inicio</th><th>Fin</th>
+          <th>Termina</th><th>Horas</th><th>Registros</th></tr></thead>
+        <tbody>${lista.map((v) => `<tr>
+          <td>${esc(v.campana)}</td><td>${esc(v.nom_parcela || nombreParcela(v.parcela))}<br><span class="muted">${esc(nombreFinca(v.finca))}</span></td>
+          <td>${esc(v.nom_tarea || nombreTarea(v.tarea))}</td><td>${esc(v.num_vuelta)}</td>
+          <td><span class="badge badge-${v.estado === 'Cerrada' ? 'aprobado' : 'pendiente'}">${esc(v.estado)}</span>${v.incluye_sin_archivar ? '<br><span class="muted">con partes sin archivar</span>' : ''}</td>
+          <td>${fmtFecha(v.fecha_inicio)}</td><td>${fmtFecha(v.fecha_fin)}</td><td>${esc(v.operario_fin ? nombreOperario(v.operario_fin) : '—')}</td>
+          <td>${fmtHoras(v.horas)}</td><td>${esc(v.registros)}</td></tr>`).join('')}
+        </tbody></table></div>` : emptyHtml('No hay vueltas: aún no hay partes Aprobados con tareas por parcela.')}
+    </section>
+
+    <section class="card"><h2>Exportar por fechas</h2>
+      <p class="muted"><strong>Horas por trabajador</strong> (para comparar con los fichajes) solo está mientras los partes no se archivan:
+        expórtalo antes de archivar. <strong>Tareas realizadas</strong> incluye el archivo y los partes Aprobados sin archivar.</p>
+      <form id="f-export" class="filters">
+        <label>Desde <input type="date" name="desde"></label>
+        <label>Hasta <input type="date" name="hasta"></label>
+        <button type="button" class="secondary" data-export="horas">Horas por trabajador (CSV)</button>
+        <button type="button" class="secondary" data-export="tareas">Tareas realizadas (CSV)</button>
+      </form>
+    </section>
+
+    <section class="card"><h2>Archivar partes</h2>
+      ${ult ? `<p>Archivado hasta el <strong>${fmtFecha(ult)}</strong>. No se pueden crear ni modificar partes de esas fechas.</p>` : '<p>Aún no se ha archivado nada.</p>'}
+      ${admin ? `<p class="muted">Pasa al archivo las tareas de los partes Aprobados hasta la fecha elegida y borra esos partes.
+          Los Rechazados se borran sin archivar (queda su copia en la auditoría). No se puede archivar si queda algún parte Pendiente o Cerrado.</p>
+        <form id="f-archivar" class="filters">
+          <label>Archivar hasta <input type="date" name="hasta" required max="${ayer()}" ${ult ? `min="${ult}"` : ''}></label>
+          <button type="submit" class="danger">Archivar</button>
+        </form>
+        <div id="archivar-msg"></div>` : '<p class="muted">Solo un ADMIN puede archivar.</p>'}
+      ${archivos.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Hasta</th><th>Fecha</th><th>Por</th><th>Partes</th><th>Tareas</th><th>Filas archivo</th><th>Rechazados borrados</th></tr></thead>
+        <tbody>${archivos.map((a) => `<tr><td>${fmtFecha(a.hasta)}</td><td>${fmtFechaHora(a.fecha)}</td><td>${esc(nombreOperario(a.archivado_por))}</td>
+          <td>${esc(a.partes)}</td><td>${esc(a.lineas)}</td><td>${esc(a.filas)}</td><td>${esc(a.rechazados)}</td></tr>`).join('')}
+        </tbody></table></div>` : ''}
+    </section>`;
+
+  main.querySelector('#f-vueltas').addEventListener('change', (ev) => {
+    const data = Object.fromEntries([...new FormData(ev.currentTarget)].filter(([, v]) => v));
+    location.hash = `#/archivo?${new URLSearchParams(data)}`;
+  });
+  main.querySelector('#b-csv-vueltas').addEventListener('click', () => {
+    descargarCsv(`vueltas${q.campana ? `_${q.campana.replace('/', '-')}` : ''}.csv`, lista, COLS_VUELTAS);
+  });
+
+  main.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', async () => {
+    const f = Object.fromEntries(new FormData(main.querySelector('#f-export')));
+    const sufijo = `${f.desde || 'inicio'}_${f.hasta || 'hoy'}`;
+    b.disabled = true;
+    try {
+      if (b.dataset.export === 'horas') {
+        const filas = (await st.api.listHorasTrabajador(f)).map((r) => ({ ...r, nombre: nombreOperario(r.operario) }));
+        if (!filas.length) return toast('No hay partes en esas fechas.', 'error');
+        descargarCsv(`horas_trabajador_${sufijo}.csv`, filas, COLS_HORAS);
+      } else {
+        const filas = await st.api.listTareasResumen(f);
+        if (!filas.length) return toast('No hay tareas en esas fechas.', 'error');
+        descargarCsv(`tareas_realizadas_${sufijo}.csv`, filas, COLS_TAREAS);
+      }
+    } catch (e) { toast(e.message, 'error'); } finally { b.disabled = false; }
+  }));
+
+  main.querySelector('#f-archivar')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const hasta = ev.currentTarget.hasta.value;
+    const msg = main.querySelector('#archivar-msg');
+    if (!confirm(`¿Archivar los partes hasta el ${fmtFecha(hasta)}?\n\nSe borrarán esos partes (los Aprobados pasan al archivo). `
+      + 'Exporta antes las horas por trabajador si las necesitas. No se puede deshacer.')) return;
+    const boton = ev.currentTarget.querySelector('button');
+    boton.disabled = true;
+    msg.innerHTML = loadingHtml('Archivando…');
+    try {
+      const r = await st.api.archivarPartes(hasta);
+      toast(`Archivado hasta el ${fmtFecha(r.hasta)}: ${r.partes} parte(s), ${r.filas} fila(s) en el archivo, ${r.rechazados} rechazado(s) borrados.`);
+      viewArchivo(q);
+    } catch (e) {
+      msg.innerHTML = errorHtml(e, { retry: false });
+      boton.disabled = false;
     }
   });
 }

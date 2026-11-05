@@ -216,3 +216,88 @@ export function validarParte(cab, lineas, cat) {
   }
   return e;
 }
+
+// ---------- Archivo de tareas y vueltas (migración 015) ----------
+
+// Campaña agrícola de una fecha, como campana_de() de la BD: con inicio '09-01', el 31/08/2026 es
+// '2025/26' y el 01/09/2026 es '2026/27'.
+export function campanaDe(fecha, inicio = '09-01') {
+  let a = Number(fecha.slice(0, 4));
+  if (fecha.slice(5) < inicio) a -= 1;
+  return `${a}/${String((a + 1) % 100).padStart(2, '0')}`;
+}
+
+// Como el disparador partes_cab_fecha_archivada: no se crean ni modifican partes en fechas archivadas.
+export const errorFechaArchivada = (fecha, hasta) => (hasta && fecha && fecha <= hasta
+  ? `Los partes hasta el ${fmtDma(hasta)} están archivados: no se pueden crear ni modificar partes de esas fechas`
+  : null);
+const fmtDma = (d) => d.split('-').reverse().join('/');
+
+// Filas del resumen de tareas de los partes Aprobados, como archivar_partes() y la vista tareas_resumen:
+// sin MOTIVOS PERSONALES ni DESPLAZAMIENTO, agrupadas por operario, día, parte, tarea, finca, parcela,
+// vehículo y apero, sumando horas; fin_vuelta = Sí si alguna de las tareas agrupadas lo marca.
+export function filasResumen(partes, lineas, cat, inicio = '09-01', origen = 'parte') {
+  const grupos = new Map();
+  for (const p of partes.filter((x) => x.estado === 'Aprobado')) {
+    for (const l of lineas.filter((x) => x.id_parte === p.id_parte)) {
+      const tipo = tipoTarea(cat, l.tarea);
+      if (tipo === TIPO_PERSONAL || tipo === TIPO_DESPLAZAMIENTO) continue;
+      const k = [p.operario, p.fecha, p.num_parte, l.tarea, l.finca, l.parcela, l.vehiculo, l.apero].join('|');
+      const g = grupos.get(k) || {
+        origen, campana: campanaDe(p.fecha, inicio), operario: p.operario, fec_tarea: p.fecha,
+        tarea: l.tarea, nom_tarea: cat.tareas.find((t) => t.cod_tar === l.tarea)?.tareas || l.tarea,
+        finca: l.finca || null, parcela: l.parcela || null, vehiculo: l.vehiculo || null, apero: l.apero || null,
+        fin_vuelta: false, horas: 0, num_parte: p.num_parte,
+      };
+      g.fin_vuelta = g.fin_vuelta || l.fin_vuelta === true;
+      g.horas = r2(g.horas + (calcHoras(l.h_ini, l.h_fin) || 0));
+      grupos.set(k, g);
+    }
+  }
+  return [...grupos.values()];
+}
+
+// Vueltas a partir de las filas del resumen, como la vista vueltas de la BD.
+// Vuelta = campaña + parcela + tarea. Orden: fecha; el mismo día, primero las filas sin fin de vuelta.
+// Cada fila con fin_vuelta cierra la vuelta en curso; la siguiente fila abre la vuelta siguiente.
+export function calcVueltas(filas, cat) {
+  const base = filas
+    .filter((f) => f.parcela && TIPOS_CON_VUELTA.includes(tipoTarea(cat, f.tarea)))
+    .sort((a, b) => a.fec_tarea.localeCompare(b.fec_tarea) || Number(a.fin_vuelta) - Number(b.fin_vuelta)
+      || a.num_parte - b.num_parte);
+  const contador = new Map();
+  const vueltas = new Map();
+  for (const f of base) {
+    const clave = `${f.campana}|${f.parcela}|${f.tarea}`;
+    const n = contador.get(clave) || 1;
+    const k = `${clave}|${n}`;
+    const v = vueltas.get(k) || {
+      campana: f.campana, finca: f.finca, parcela: f.parcela,
+      nom_parcela: cat.parcelas.find((p) => p.cod_par === f.parcela)?.nom_parc || f.parcela,
+      tarea: f.tarea, nom_tarea: f.nom_tarea, num_vuelta: n, estado: 'Abierta',
+      fecha_inicio: f.fec_tarea, fecha_fin: null, operario_fin: null,
+      horas: 0, registros: 0, operarios: new Set(), incluye_sin_archivar: false,
+    };
+    v.horas = r2(v.horas + Number(f.horas));
+    v.registros += 1;
+    v.operarios.add(f.operario);
+    v.incluye_sin_archivar = v.incluye_sin_archivar || f.origen === 'parte';
+    if (f.fin_vuelta) {
+      Object.assign(v, { estado: 'Cerrada', fecha_fin: f.fec_tarea, operario_fin: f.operario });
+      contador.set(clave, n + 1);
+    }
+    vueltas.set(k, v);
+  }
+  return [...vueltas.values()].map((v) => ({ ...v, operarios: [...v.operarios].sort().join(', ') }));
+}
+
+// CSV para Excel en español: separador ";", coma decimal y BOM para que reconozca los acentos.
+export function aCsv(filas, columnas) {
+  const celda = (v) => {
+    if (v == null) return '';
+    const s = typeof v === 'number' ? String(v).replace('.', ',') : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : String(v);
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return `﻿${[columnas.map(([, t]) => t).join(';'),
+    ...filas.map((f) => columnas.map(([k]) => celda(f[k])).join(';'))].join('\r\n')}\r\n`;
+}

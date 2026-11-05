@@ -9,7 +9,7 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
 | 4 · Valores iniciales | `012_valores_iniciales.sql` | Aplicada y verificada 04/11 |
 | 5 · Supervisor y auditoría de partes | `013_supervisor_y_auditoria_partes.sql` | Aplicada y verificada 04/11 |
 | 6 · `fin_vuelta` | `014_fin_vuelta.sql` | Aplicada y verificada 04/11 |
-| 7 · Archivo de tareas y vueltas | 015 | Por preparar |
+| 7 · Archivo de tareas y vueltas | `015_archivo_tareas_y_vueltas.sql` | Aplicada y verificada 05/11 |
 | 8 · PDF al aprobar | 016 + función del servidor (Edge Function) | Por preparar |
 
 ## 4 · Valores iniciales (012)
@@ -36,11 +36,12 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
   `fin_vuelta`, campaña y **duración en horas** (sin hora de inicio ni de fin).
 - Se archivan todas las tareas **menos MOTIVOS PERSONALES y DESPLAZAMIENTO** (respuesta 8).
 - Filas **agrupadas** por operario, día, tarea, parcela, vehículo y apero, sumando horas.
-- Campaña = **año agrícola** con fecha de inicio en la configuración; las vueltas empiezan de cero en cada campaña.
-  Pendiente de decidir al preparar la 015: si además se guarda la campaña en alguna tabla de partes
-  (propuesta: no, se calcula a partir de la fecha y se guarda en el archivo).
-- Archivo "hasta una fecha" (solo ADMIN): exige que todos los partes del rango estén Aprobados y con PDF;
-  después se borran esos partes y nadie puede crear ni editar partes en esas fechas.
+- Campaña = **año agrícola** con fecha de inicio en la configuración (`cfc_inicio` = 09-01); las vueltas empiezan de cero
+  en cada campaña. En los partes no se guarda: se calcula con `campana_de(fecha)` y queda guardada en el archivo.
+- Archivo "hasta una fecha" (solo ADMIN, como mucho hasta ayer): no se puede si queda algún parte Pendiente o Cerrado
+  en el rango. Los Aprobados pasan al archivo y se borran sin copia individual en la auditoría (queda una anotación del
+  archivado); **los Rechazados se borran sin archivar**, con su copia completa en la auditoría (decidido 05/11).
+  Después nadie puede crear ni editar partes en esas fechas. La comprobación de que tienen PDF se añade en la 016.
 - La vista de vueltas (finca, parcela, tarea, operario que marca el fin, fecha de fin) incluye el archivo y los
   Aprobados aún sin archivar. El "archivo de vueltas" del supervisor es una exportación de esa vista.
 - **Horas por trabajador**: solo exportación CSV (parte, operario, fecha, entrada, salida, almuerzo, comida)

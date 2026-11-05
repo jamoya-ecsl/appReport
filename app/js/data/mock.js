@@ -4,11 +4,11 @@
 // Emula las reglas del esquema (RLS por rol, un parte por operario y día, validar_parte() de la 009...).
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
-  normalizarFinVuelta, errorFinVuelta,
+  normalizarFinVuelta, errorFinVuelta, errorFechaArchivada, filasResumen, calcVueltas,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v6';  // v6: fin_vuelta en las tareas (migración 014)
+const KEY = 'pt-demo-v7';  // v7: archivo de tareas y vueltas (migración 015)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -99,8 +99,9 @@ function semilla() {
   const respuestas = { 'l-2': true, 'l-3': false, 'l-7': false, 'l-10': true };
   lineas.forEach((l, i) => { lineas[i] = normalizarFinVuelta({ ...l, fin_vuelta: respuestas[l.id_linea] ?? null }, CATALOGOS); });
   // Como la tabla configuracion (011 y 012).
-  const config = { th_jornada: 8.5, cfh_ent: '07:30', cfh_sal: '18:00', cft_alm: 30, cft_com: 90 };
-  return { partes, lineas, seq: 4, cod: null, config };
+  const config = { th_jornada: 8.5, cfh_ent: '07:30', cfh_sal: '18:00', cft_alm: 30, cft_com: 90, cfc_inicio: '09-01' };
+  // Como archivos_partes y tareas_realizadas (015): vacías al empezar.
+  return { partes, lineas, seq: 4, cod: null, config, archivos: [], archivo: [] };
 }
 
 function cargar() {
@@ -122,6 +123,13 @@ export function createMockApi(reason) {
   });
   const lineaConHoras = (l) => ({ ...l, t_horas: calcHoras(l.h_ini, l.h_fin) });
   const exigirSesion = () => { if (!yo()) throw new Error('Sesión no iniciada.'); };
+  const ultimoArchivo = () => db.archivos.reduce((m, a) => (a.hasta > m ? a.hasta : m), '') || null;
+  const esGestorActual = () => { exigirSesion(); return esGestor(yo()); };
+  const filtrarFechas = (lista, campo, f) => lista
+    .filter((x) => !f.desde || x[campo] >= f.desde).filter((x) => !f.hasta || x[campo] <= f.hasta);
+  const dma = (d) => d.split('-').reverse().join('/');
+  // Como la vista tareas_resumen: archivo + partes Aprobados sin archivar.
+  const tareasResumen = () => db.archivo.concat(filasResumen(db.partes, db.lineas, CATALOGOS, db.config.cfc_inicio));
   const valoresIniciales = () => ({ h_ent: db.config.cfh_ent, h_sal: db.config.cfh_sal,
     t_alm_min: db.config.cft_alm, t_com_min: db.config.cft_com });
 
@@ -191,6 +199,9 @@ export function createMockApi(reason) {
         }
       }
       const operario = id_parte ? p.operario : cab.operario;
+      // Como partes_cab_fecha_archivada (015).
+      const eArch = errorFechaArchivada(cab.fecha, ultimoArchivo());
+      if (eArch) throw new Error(eArch);
       // Igual que validar_parte() en la BD: se rechaza el guardado entero con el primer error.
       const errores = validarParte({ ...cab, operario }, lineas, CATALOGOS);
       if (errores.length) throw new Error(errores[0]);
@@ -262,6 +273,70 @@ export function createMockApi(reason) {
       db.partes = db.partes.filter((x) => x.id_parte !== id);
       db.lineas = db.lineas.filter((l) => l.id_parte !== id);
       guardar();
+    },
+
+    // ---------- Archivo de tareas y vueltas: como las vistas y archivar_partes() de la 015 ----------
+    // Las vistas solo devuelven filas a ADMIN y SUPERVISOR; al operario, ninguna.
+    async listVueltas(f = {}) {
+      await wait();
+      if (!esGestorActual()) return [];
+      return calcVueltas(tareasResumen(), CATALOGOS)
+        .filter((v) => !f.campana || v.campana === f.campana)
+        .filter((v) => !f.estado || v.estado === f.estado)
+        .sort((a, b) => b.campana.localeCompare(a.campana) || a.parcela.localeCompare(b.parcela)
+          || a.tarea.localeCompare(b.tarea) || a.num_vuelta - b.num_vuelta);
+    },
+    async listTareasResumen(f = {}) {
+      await wait();
+      if (!esGestorActual()) return [];
+      return filtrarFechas(tareasResumen(), 'fec_tarea', f)
+        .sort((a, b) => a.fec_tarea.localeCompare(b.fec_tarea) || a.num_parte - b.num_parte);
+    },
+    async listHorasTrabajador(f = {}) {
+      await wait();
+      if (!esGestorActual()) return [];
+      return filtrarFechas(db.partes, 'fecha', f)
+        .map((p) => ({ parte: p.num_parte, operario: p.operario, fecha: p.fecha, h_ent: p.h_ent, h_sal: p.h_sal,
+          t_alm_min: p.t_alm_min, t_com_min: p.t_com_min, estado: p.estado }))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.operario.localeCompare(b.operario));
+    },
+    async listArchivos() {
+      await wait(100);
+      if (!esGestorActual()) return [];
+      return [...db.archivos].sort((a, b) => b.hasta.localeCompare(a.hasta));
+    },
+    async archivarPartes(hasta) {
+      exigirSesion();
+      await wait(500);
+      const u = yo();
+      if (u.rol_app !== 'ADMIN') throw new Error('Solo un ADMIN puede archivar partes');
+      const hoy = new Date().toISOString().slice(0, 10);
+      if (!hasta || hasta >= hoy) throw new Error('Solo se puede archivar hasta ayer como mucho');
+      const ult = ultimoArchivo();
+      if (ult && hasta <= ult) throw new Error(`Ya está archivado hasta el ${dma(ult)}`);
+      const enRango = db.partes.filter((p) => p.fecha <= hasta);
+      const bloq = enRango.filter((p) => p.estado === 'Pendiente' || p.estado === 'Cerrado')
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.num_parte - b.num_parte);
+      if (bloq.length) {
+        const txt = bloq.slice(0, 10).map((p) => `nº ${p.num_parte} (${p.estado}, ${dma(p.fecha)})`).join(', ');
+        throw new Error(`No se puede archivar: hay ${bloq.length} parte(s) hasta el ${dma(hasta)} sin aprobar: ${txt}${bloq.length > 10 ? ', …' : ''}`);
+      }
+      const aprobados = enRango.filter((p) => p.estado === 'Aprobado');
+      const idsAprobados = new Set(aprobados.map((p) => p.id_parte));
+      const ids = new Set(enRango.map((p) => p.id_parte));
+      const lineas = db.lineas.filter((l) => idsAprobados.has(l.id_parte));
+      const id = db.archivos.length + 1;
+      const filas = filasResumen(aprobados, lineas, CATALOGOS, db.config.cfc_inicio, 'archivo')
+        .map((f) => ({ ...f, id_archivo: id }));
+      const r = { hasta, partes: aprobados.length, lineas: lineas.length, filas: filas.length,
+        rechazados: enRango.length - aprobados.length };
+      db.archivo.push(...filas);
+      db.archivos.push({ id, hasta, fecha: new Date().toISOString(), archivado_por: u.cod_ope,
+        partes: r.partes, lineas: r.lineas, filas: r.filas, rechazados: r.rechazados });
+      db.partes = db.partes.filter((p) => !ids.has(p.id_parte));
+      db.lineas = db.lineas.filter((l) => !ids.has(l.id_parte));
+      guardar();
+      return r;
     },
   };
 }

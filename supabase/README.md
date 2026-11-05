@@ -19,11 +19,12 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `009_lineas_y_validaciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); verificada 30/30 con `pruebas/pruebas_modulo1.sql` | Módulo 1: tipos DESPLAZAMIENTO / MOTIVOS PERSONALES (TD001, TP001), cabecera sin finca/vehículo/tiempo, 15 min, `validar_parte()`, líneas solo vía `guardar_parte()` |
 | `010a_estado_cerrado.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial) | Añade el estado `Cerrado` |
 | `010_estados_y_funciones.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 32/32 con `pruebas/pruebas_modulo2.sql` | Módulo 2: Pendiente → Cerrado → Aprobado/Rechazado sin vuelta atrás; `cerrar_parte()`, `revisar_parte()`, `borrar_parte()`; sin escritura directa en `partes_cab` |
-| `011_configuracion_y_horas_extra.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada 19/19 con `pruebas/pruebas_modulo3.sql` | Módulo 3: tabla `configuracion` (`th_jornada` = 8, solo ADMIN), `h_ext` calculado por la BD (corrección manual solo ADMIN), `ht_tareas` al consultar |
+| `011_configuracion_y_horas_extra.sql` | Aplicada 28/10 desde el SQL Editor (no figura en el historial); objetos y permisos comprobados; verificada con `pruebas/pruebas_modulo3.sql` (21 casos) | Módulo 3: tabla `configuracion` (`th_jornada` = 8, solo ADMIN), `h_ext` calculado por la BD (corrección manual solo ADMIN), `ht_tareas` al consultar |
 | `012_valores_iniciales.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo4.sql` | Módulo 4: valores iniciales del parte en `configuracion` (`cfh_ent` 07:30, `cfh_sal` 18:00, `cft_alm` 30, `cft_com` 90), `valores_iniciales_parte()` para todos los roles, campos vacíos → valor de la configuración en `guardar_parte()`; `th_jornada` = 8,5 |
 
 | `013_supervisor_y_auditoria_partes.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo5.sql` | Módulo 5: el SUPERVISOR crea partes para cualquier operario activo y corrige los Pendientes y Cerrados; titular activo obligatorio; un parte no Pendiente sin nave conserva al menos una tarea; auditoría de `partes_cab` y `partes_det` (registro = nº de parte); `borrar_parte()` deja la copia por disparador |
 | `014_fin_vuelta.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 10/10 con `pruebas/pruebas_modulo6.sql` | Módulo 6: `partes_det.fin_vuelta` (Sí/No/sin responder) en tareas con parcela y tipo POR SUPERFICIE o POR HORAS (en el resto, No); obligatoria al cerrar y en partes ya cerrados; `requiere_fin_vuelta(partes_det)` para la app |
+| `015_archivo_tareas_y_vueltas.sql` | Aplicada 05/11 desde el SQL Editor (no figura en el historial); verificada 15/15 con `pruebas/pruebas_modulo7.sql` | Módulo 7: campaña agrícola (`cfc_inicio` = 09-01, `campana_de()`); `archivar_partes(hasta)` (solo ADMIN): exige que no quede ningún parte Pendiente o Cerrado en el rango, pasa las tareas de los Aprobados a `tareas_realizadas` (sin MOTIVOS PERSONALES ni DESPLAZAMIENTO, agrupadas) y borra los partes; los Rechazados se borran sin archivar con su copia en la auditoría; registro en `archivos_partes`; no se crean ni modifican partes en fechas archivadas; vistas `tareas_resumen`, `vueltas` y `horas_trabajador` (solo ADMIN y SUPERVISOR) |
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
@@ -85,6 +86,18 @@ Reglas que impone la BD (no solo la interfaz):
 - **Fin de vuelta** (014): cada línea de `guardar_parte` lleva `fin_vuelta` (`true` / `false` / `null` = sin responder).
   Para saber en qué tareas preguntarlo: `partes_det(*, requiere_fin_vuelta)`; en las demás la BD guarda `false`.
   Cerrar exige respuesta en todas las que la requieren; el error dice cuáles faltan.
+- **Vueltas y archivo** (015), solo ADMIN y SUPERVISOR ven filas (al operario las vistas le devuelven 0 filas):
+  - Vueltas: `from('vueltas').select('*')` → `campana, finca, parcela, nom_parcela, tarea, nom_tarea, num_vuelta,
+    estado ('Abierta' | 'Cerrada'), fecha_inicio, fecha_fin, operario_fin, horas, registros, operarios, incluye_sin_archivar`.
+    Incluye el archivo y los partes Aprobados aún sin archivar. El "archivo de vueltas" es la exportación CSV de esta vista.
+  - Tareas realizadas: `from('tareas_resumen')` → `origen ('archivo' | 'parte'), campana, operario, fec_tarea, tarea, nom_tarea,
+    finca, parcela, vehiculo, apero, fin_vuelta, horas, num_parte`.
+  - Horas por trabajador (CSV para comparar con los fichajes): `from('horas_trabajador')` → `parte, operario, fecha, h_ent, h_sal,
+    t_alm_min, t_com_min, estado`. **Exportarlo antes de archivar**: al archivar, esos partes se borran.
+  - Archivar (ADMIN): `rpc('archivar_partes', { p_hasta: 'AAAA-MM-DD' })` → `{hasta, partes, lineas, filas, rechazados}`.
+    Hasta ayer como mucho y posterior al último archivado (`from('archivos_partes')`, el de mayor `hasta`).
+    No se puede deshacer: pedir confirmación y recordar la exportación de horas.
+  - Campaña de una fecha: `rpc('campana_de', { p_fecha })` → `'2026/27'`. El inicio (`cfc_inicio`, MM-DD) está en `configuracion`.
 - **Valores iniciales del formulario** (012): `rpc('valores_iniciales_parte')` → `{h_ent, h_sal, t_alm_min, t_com_min}`,
   para cualquier rol. La tabla `configuracion` (incluidos estos valores y `th_jornada`) solo la lee y modifica el ADMIN:
   `update configuracion set valor = '08:00' where clave = 'cfh_ent'`.
@@ -130,6 +143,12 @@ Para la 013: `pruebas_modulo5.sql` (18 casos, nuevo); en `pruebas_modulo1.sql`, 
 corrige partes en Pendiente; antes de la 013 salen bloqueadas).
 Para la 014: `pruebas_modulo6.sql` (10 casos, nuevo); en `pruebas_por_rol.sql` la línea de ejemplo lleva `fin_vuelta = false`
 (tiene parcela y se cierra); funciona antes y después de la 014.
+Para la 015: `pruebas_modulo7.sql` (15 casos, nuevo; usa partes del año 2000 y lo deshace todo al terminar).
+No contiene `DELETE`, así que también se puede ejecutar desde Claude Code. Los demás scripts no cambian.
+Resultados con la 015 aplicada (05/11): módulo 7 15/15, por rol 32/32, módulo 1 32/32, módulo 3 21/21 y módulo 5 18/18 (SQL Editor);
+módulos 6 10/10, 4 18/18 y 2 32/32 (Claude Code).
+En `pruebas_modulo4.sql`, V04 espera desde la 015 también la clave `cfc_inicio=09-01`. El módulo 3 tiene 21 casos: los "19/19" anteriores eran un error de recuento (H09b, H11 y T01 se añadieron después).
+Cuando se archiven partes reales, `pruebas_modulo7.sql` dejará de pasar (sus fechas del año 2000 quedarán archivadas).
 Resultados con la 014 aplicada (04/11): módulo 6 10/10, por rol 32/32, módulo 1 32/32, módulo 2 32/32, módulo 3 19/19, módulo 4 18/18 y módulo 5 18/18.
 (Los módulos 2 y 4 se ejecutaron desde Claude Code; el conector rechaza los scripts que contienen DELETE, por eso
 los módulos 1, 3 y 5 se ejecutaron en el SQL Editor.)
