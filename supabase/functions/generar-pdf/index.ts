@@ -25,7 +25,7 @@ type Linea = {
 type Datos = {
   num_parte: number; fecha: string; campana: string; operario: string; nom_operario: string | null;
   h_ent: string; h_sal: string; t_alm_min: number; t_com_min: number; tot_horas: number; h_ext: number;
-  ht_tareas: number; mat_nave: boolean; obs: string | null;
+  ht_tareas: number; obs: string | null;
   cerrado_por: string | null; nom_cerrado_por: string | null; fecha_cierre: string | null;
   supervisor_revisa: string | null; nom_supervisor: string | null; fecha_revision: string | null;
   comentario_supervisor: string | null; lineas: Linea[];
@@ -146,7 +146,6 @@ async function dibujar(t: Pedido, por: string): Promise<Uint8Array> {
     ['Almuerzo', `${d.t_alm_min} min`, 'Comida', `${d.t_com_min} min`],
     ['Total jornada', horas(d.tot_horas), 'Horas extra', horas(d.h_ext)],
     ['Horas de tareas', horas(d.ht_tareas), 'Campaña', d.campana],
-    ['Mantenimiento nave', d.mat_nave ? 'Sí' : 'No', '', ''],
   ];
   for (const [a, va, b, vb] of filas) {
     campo(a, va, M);
@@ -199,7 +198,7 @@ async function dibujar(t: Pedido, por: string): Promise<Uint8Array> {
     if (l.obs) { parrafo(`Obs.: ${l.obs}`, M + 34, A4.w - 2 * M - 34, 7); y -= 1; }
     page.drawLine({ start: { x: M, y: y + 8 }, end: { x: A4.w - M, y: y + 8 }, thickness: 0.3, color: LINEA });
   }
-  if (!d.lineas.length) { texto('Sin tareas (mantenimiento en nave).', M, y, 9, f, GRIS); y -= 12; }
+  if (!d.lineas.length) { texto('Sin tareas.', M, y, 9, f, GRIS); y -= 12; }
   y -= 14;
 
   // Cierre y revisión

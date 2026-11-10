@@ -8,6 +8,14 @@ export const ESTADOS = ['Pendiente', 'Cerrado', 'Aprobado', 'Rechazado'];
 
 export const TIPO_DESPLAZAMIENTO = 'DESPLAZAMIENTO';
 export const TIPO_PERSONAL = 'MOTIVOS PERSONALES';
+// Mantenimiento como tarea (migración 018): sin finca; no cambian la finca en la que se está.
+export const TIPO_MANT_NAVE = 'MANTENIMIENTO NAVE';          // solo horas; puede ser la primera tarea
+export const TIPO_MANT_VEH = 'MANTENIMIENTO VEHÍCULOS';      // vehículo o apero; no puede ser la primera
+export const TIPOS_MANTENIMIENTO = [TIPO_MANT_NAVE, TIPO_MANT_VEH];
+// Tipos en los que solo se indican las horas.
+export const soloHoras = (tipo) => tipo === TIPO_PERSONAL || tipo === TIPO_MANT_NAVE;
+// Tipos sin finca ni parcela.
+export const sinFinca = (tipo) => soloHoras(tipo) || tipo === TIPO_MANT_VEH;
 
 export const esGestor = (u) => !!u && (u.rol_app === 'ADMIN' || u.rol_app === 'SUPERVISOR');
 
@@ -38,14 +46,17 @@ export const puedeRevisar = (u, p) =>
 // Borrar: solo ADMIN, en cualquier estado.
 export const puedeBorrar = (u) => u?.rol_app === 'ADMIN';
 
-// Igual que el disparador tg_partes_cab_estado al cerrar.
-export const errorCierre = (p, nLineas) =>
-  !p.mat_nave && !nLineas ? 'Para cerrar un parte sin mantenimiento en nave hace falta al menos una tarea' : null;
+// Como parte_tiene_trabajo() (018): alguna tarea que no sea MOTIVOS PERSONALES.
+export const tieneTrabajo = (lineas, cat) => lineas.some((l) => tipoTarea(cat, l.tarea) !== TIPO_PERSONAL);
 
-// Igual que validar_parte() desde la 013: al corregir un parte ya cerrado no se le quitan todas las tareas.
-export const errorSinTareas = (estado, matNave, nLineas) =>
-  estado && estado !== 'Pendiente' && !matNave && !nLineas
-    ? `El parte está ${estado}: sin mantenimiento en nave necesita al menos una tarea` : null;
+// Igual que el disparador tg_partes_cab_estado al cerrar (018).
+export const errorCierre = (lineas, cat) => (tieneTrabajo(lineas, cat) ? null
+  : 'Para cerrar un parte hace falta al menos una tarea (sin contar MOTIVOS PERSONALES)');
+
+// Igual que validar_parte() (018): un parte que ya no está Pendiente conserva al menos una tarea.
+export const errorSinTareas = (estado, lineas, cat) =>
+  estado && estado !== 'Pendiente' && !tieneTrabajo(lineas, cat)
+    ? `El parte está ${estado}: necesita al menos una tarea (sin contar MOTIVOS PERSONALES)` : null;
 
 const aMin = (t) => {
   if (!t) return null;
@@ -151,6 +162,7 @@ export function errorFinVuelta(lineas, cat, inicio = 'Para cerrar el parte indic
 
 export const etiquetaTipo = (tipo) => ({
   'POR HORAS': 'h', 'POR SUPERFICIE (HAS)': 'ha', [TIPO_DESPLAZAMIENTO]: 'desplazamiento', [TIPO_PERSONAL]: 'personal',
+  [TIPO_MANT_NAVE]: 'mantenimiento', [TIPO_MANT_VEH]: 'mantenimiento',
 }[tipo] || '');
 
 // Orden de las líneas: por hora de inicio (y fin), como validar_parte() en la BD.
@@ -194,6 +206,8 @@ export function validarParte(cab, lineas, cat) {
   const nombreFinca = (cod) => cat.fincas.find((f) => f.cod_fin === cod)?.finca || cod;
   let prevFin = null;
   let fincaActual = null;
+  let hayPrevia = false;   // ya hay alguna tarea que no es MOTIVOS PERSONALES (018)
+  const primera = 'la primera tarea (sin contar MOTIVOS PERSONALES) debe ser un DESPLAZAMIENTO o un MANTENIMIENTO NAVE.';
   for (const l of ordenarLineas(completas)) {
     const tipo = tipoTarea(cat, l.tarea);
     const n = `Tarea ${hhmm(l.h_ini)}–${hhmm(l.h_fin)}:`;
@@ -205,21 +219,32 @@ export function validarParte(cab, lineas, cat) {
     }
     prevFin = l.h_fin;
 
-    if (tipo === TIPO_PERSONAL) {
-      if (l.finca || l.parcela || l.vehiculo || l.apero) e.push(`${n} en MOTIVOS PERSONALES solo se indican las horas.`);
+    if (soloHoras(tipo)) {
+      if (l.finca || l.parcela || l.vehiculo || l.apero) e.push(`${n} en ${tipo} solo se indican las horas.`);
+      if (tipo === TIPO_MANT_NAVE) hayPrevia = true;
+      continue;
+    }
+    if (tipo === TIPO_MANT_VEH) {
+      if (!hayPrevia) { e.push(`${n} ${primera}`); hayPrevia = true; }
+      if (l.finca || l.parcela) e.push(`${n} en ${TIPO_MANT_VEH} no se indica finca ni parcela.`);
+      if (!l.vehiculo && !l.apero) e.push(`${n} un ${TIPO_MANT_VEH} necesita vehículo o apero.`);
       continue;
     }
     if (!l.finca) { e.push(`${n} falta la finca.`); continue; }
     if (tipo === TIPO_DESPLAZAMIENTO) {
       if (!l.vehiculo) e.push(`${n} un DESPLAZAMIENTO necesita vehículo.`);
       fincaActual = l.finca;
-    } else if (fincaActual == null) {
-      e.push(`${n} la primera tarea (sin contar MOTIVOS PERSONALES) debe ser un DESPLAZAMIENTO.`);
+    } else if (!hayPrevia) {
+      e.push(`${n} ${primera}`);
       fincaActual = l.finca;  // evita repetir el mismo aviso en cada línea
+    } else if (fincaActual == null) {
+      e.push(`${n} para trabajar en ${nombreFinca(l.finca)} hace falta antes un DESPLAZAMIENTO.`);
+      fincaActual = l.finca;
     } else if (l.finca !== fincaActual) {
       e.push(`${n} para pasar de ${nombreFinca(fincaActual)} a ${nombreFinca(l.finca)} hace falta antes un DESPLAZAMIENTO.`);
       fincaActual = l.finca;
     }
+    hayPrevia = true;
   }
   return e;
 }

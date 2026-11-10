@@ -9,7 +9,7 @@ import {
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v8';  // v8: PDF del parte (migración 016)
+const KEY = 'pt-demo-v9';  // v9: mantenimiento como tarea, sin mat_nave (migración 018)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -41,6 +41,8 @@ const CATALOGOS = {
     { cod_tar: 'TT902', tareas: 'Taller (demo)', tipo: 'POR HORAS' },
     { cod_tar: 'TD901', tareas: 'Desplazamiento (demo)', tipo: 'DESPLAZAMIENTO' },
     { cod_tar: 'TP901', tareas: 'Motivos personales (demo)', tipo: 'MOTIVOS PERSONALES' },
+    { cod_tar: 'TN901', tareas: 'Mantenimiento nave (demo)', tipo: 'MANTENIMIENTO NAVE' },
+    { cod_tar: 'TV901', tareas: 'Mantenimiento vehículos (demo)', tipo: 'MANTENIMIENTO VEHÍCULOS' },
   ],
   vehiculos: [
     { id_mat: 'DEMO-0001', alias: 'TD1', equipo: 'Tractor demo A', tipo: 'TRACTOR' },
@@ -62,7 +64,7 @@ const dia = (offset) => {
 function semilla() {
   const cab = (n, operario, offset, estado, extra = {}) => ({
     id_parte: `demo-${n}`, num_parte: n, operario, fecha: dia(offset),
-    h_ent: '07:30', h_sal: '16:00', t_alm_min: 30, t_com_min: 0, h_ext: 0, h_ext_manual: false, mat_nave: false,
+    h_ent: '07:30', h_sal: '16:00', t_alm_min: 30, t_com_min: 0, h_ext: 0, h_ext_manual: false,
     obs: '', estado,
     creado_por: OPERARIOS.find((o) => o.cod_ope === operario).email,
     fch_creacion: new Date().toISOString(), fch_modificacion: new Date().toISOString(),
@@ -196,7 +198,7 @@ export function createMockApi(reason) {
         p = db.partes.find((x) => x.id_parte === id_parte);
         // Como guardar_parte() desde la 013: el SUPERVISOR corrige Pendientes y Cerrados.
         if (!p || !visible(p) || !puedeEditar(u, p)) throw new Error('Parte no encontrado o sin permiso para editarlo');
-        const e = errorSinTareas(p.estado, cab.mat_nave, lineas.length)
+        const e = errorSinTareas(p.estado, lineas, CATALOGOS)
           || (p.estado !== 'Pendiente' ? errorFinVuelta(lineas, CATALOGOS, `El parte está ${p.estado}: indica si termina la vuelta en`) : null);
         if (e) throw new Error(e);
       } else {
@@ -251,7 +253,7 @@ export function createMockApi(reason) {
       if (!puedeCerrar(u, p)) throw new Error('Parte no encontrado o sin permiso para cerrarlo');
       const errores = validarParte(p, lineasDe(id), CATALOGOS);
       if (errores.length) throw new Error(errores[0]);
-      const e = errorCierre(p, lineasDe(id).length) || errorFinVuelta(lineasDe(id), CATALOGOS);
+      const e = errorCierre(lineasDe(id), CATALOGOS) || errorFinVuelta(lineasDe(id), CATALOGOS);
       if (e) throw new Error(e);
       const ahora = new Date().toISOString();
       Object.assign(p, { estado: 'Cerrado', cerrado_por: u.cod_ope, fecha_cierre: ahora, fch_modificacion: ahora });

@@ -4,7 +4,7 @@
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
 import {
-  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, esGestor, puedeEditar, motivoNoEditable,
+  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_MANT_VEH, soloHoras, sinFinca, esGestor, puedeEditar, motivoNoEditable,
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
   VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
@@ -197,7 +197,7 @@ function tablaPartes(partes) {
       <tr class="clickable" data-href="#/partes/${esc(p.id_parte)}" tabindex="0">
         <td>${esc(p.num_parte)}</td><td>${fmtFecha(p.fecha)}</td>
         ${gestor ? `<td>${esc(nombreOperario(p.operario))}</td>` : ''}
-        <td>${esc((p.fincas || []).map(nombreFinca).join(', ') || (p.mat_nave ? 'Nave' : '—'))}</td><td>${fmtHoras(p.tot_horas)}</td><td>${esc(p.n_lineas)}</td><td>${badge(p.estado)}</td>
+        <td>${esc((p.fincas || []).map(nombreFinca).join(', ') || (p.n_lineas ? 'Nave' : '—'))}</td><td>${fmtHoras(p.tot_horas)}</td><td>${esc(p.n_lineas)}</td><td>${badge(p.estado)}</td>
       </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -268,7 +268,6 @@ async function viewDetalle(id) {
       ${campo('Total horas', `<strong>${fmtHoras(p.tot_horas)}</strong>`)}
       ${campo('Horas extra', `${fmtHoras(p.h_ext)}${p.h_ext_manual ? ' <span class="muted">(corregidas a mano)</span>' : ''}`)}
       ${campo('Horas de tareas', `${fmtHoras(p.ht_tareas ?? calcHtTareas(p.lineas, st.cat))} <span class="muted">(sin motivos personales)</span>`)}
-      ${campo('Mant. nave', p.mat_nave ? 'Sí' : 'No')}
       ${campo('Observaciones', esc(p.obs || '—'))}
     </dl></section>
     <section class="card"><h2>Tareas realizadas (${p.lineas.length})</h2>
@@ -311,7 +310,7 @@ async function viewDetalle(id) {
   if (p.estado === 'Aprobado') pintarPdfs(main, p);
   const accMsg = main.querySelector('#acc-msg');
   main.querySelector('#b-cerrar')?.addEventListener('click', async (ev) => {
-    const err = errorCierre(p, p.lineas.length) || errorFinVuelta(p.lineas, st.cat);
+    const err = errorCierre(p.lineas, st.cat) || errorFinVuelta(p.lineas, st.cat);
     if (err) { accMsg.innerHTML = errorHtml(new Error(err), { retry: false }); return; }
     const b = ev.currentTarget;
     if (!confirm(`¿Cerrar el parte nº ${p.num_parte}? Después no se podrá reabrir${esGestor(u) ? '' : ' ni editar'}.`)) return;
@@ -378,7 +377,7 @@ async function viewForm(id) {
   try { ini = (await st.api.getValoresIniciales()) || ini; } catch { /* se usan los de rules.js */ }
   const cab = p || {
     operario: u.cod_ope, fecha: fechaLocal(), h_ent: ini.h_ent, h_sal: ini.h_sal,
-    t_alm_min: ini.t_alm_min, t_com_min: ini.t_com_min, h_ext: 0, h_ext_manual: false, mat_nave: false, obs: '',
+    t_alm_min: ini.t_alm_min, t_com_min: ini.t_com_min, h_ext: 0, h_ext_manual: false, obs: '',
   };
   const { cat } = st;
   // Horas extra (011): las calcula la BD. Solo el ADMIN ve th_jornada y puede corregirlas a mano.
@@ -412,7 +411,6 @@ async function viewForm(id) {
         <label class="check"><input type="checkbox" name="h_ext_manual" ${cab.h_ext_manual ? 'checked' : ''}> Corregir horas extra a mano</label>`
         : `<label>Horas extra <input value="${id ? esc(fmtHoras(cab.h_ext)) : ''}" placeholder="Se calculan al guardar" disabled>
           <span class="muted">Las calcula el sistema según la jornada.</span></label>`}
-        <label class="check"><input type="checkbox" name="mat_nave" ${cab.mat_nave ? 'checked' : ''}> Mantenimiento nave</label>
         <label class="wide">Observaciones <textarea name="obs" rows="2">${esc(cab.obs || '')}</textarea></label>
       </div>
       <p class="total">Total jornada: <strong id="tot">—</strong></p></section>
@@ -420,7 +418,8 @@ async function viewForm(id) {
       <section class="card"><div class="page-head"><h2>Tareas realizadas</h2>
         <button type="button" class="secondary" id="add-linea">+ Añadir tarea</button></div>
         <p class="muted">Horas en intervalos de 15 minutos. La primera tarea (sin contar MOTIVOS PERSONALES) es un
-          DESPLAZAMIENTO con finca y vehículo; para cambiar de finca, añade otro DESPLAZAMIENTO.
+          DESPLAZAMIENTO con finca y vehículo o un MANTENIMIENTO NAVE; para trabajar en una finca o cambiar de finca,
+          añade un DESPLAZAMIENTO. Los mantenimientos no llevan finca: el de vehículos lleva vehículo o apero.
           Las tareas se ordenan por hora de inicio y no pueden solaparse.</p>
         <div id="lineas"></div>
         <p class="muted" id="sin-lineas">Aún no hay tareas.</p>
@@ -439,8 +438,8 @@ async function viewForm(id) {
     const finca = l.finca || '';
     return `<fieldset class="linea">
       <label>Tarea <select name="tarea">${options(cat.tareas, l.tarea, 'cod_tar', (t) => `${t.tareas} (${etiquetaTipo(t.tipo)})`)}</select></label>
-      <label data-campo>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca)}</select></label>
-      <label data-campo>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
+      <label data-campo data-finca>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca)}</select></label>
+      <label data-campo data-finca>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
       <label data-campo><span class="lbl-veh">Vehículo</span> <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
       <label data-campo>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
       <label data-vuelta>Fin de vuelta <select name="fin_vuelta">
@@ -454,23 +453,25 @@ async function viewForm(id) {
       <button type="button" class="link danger quitar">Quitar</button>
     </fieldset>`;
   }
-  // Campos según el tipo de tarea: MOTIVOS PERSONALES solo lleva horas; DESPLAZAMIENTO exige vehículo.
+  // Campos según el tipo de tarea (018): MOTIVOS PERSONALES y MANTENIMIENTO NAVE solo llevan horas;
+  // MANTENIMIENTO VEHÍCULOS, vehículo o apero sin finca ni parcela; DESPLAZAMIENTO exige vehículo.
   function aplicarTipo(fs) {
     const tipo = tipoTarea(cat, fs.querySelector('[name=tarea]').value);
-    const personal = tipo === TIPO_PERSONAL;
     fs.querySelectorAll('[data-campo]').forEach((lab) => {
-      lab.hidden = personal;
-      if (personal) lab.querySelector('select').value = '';
+      const ocultar = lab.hasAttribute('data-finca') ? sinFinca(tipo) : soloHoras(tipo);
+      lab.hidden = ocultar;
+      if (ocultar) lab.querySelector('select').value = '';
     });
-    fs.querySelector('.lbl-veh').textContent = tipo === TIPO_DESPLAZAMIENTO ? 'Vehículo (obligatorio)' : 'Vehículo';
+    fs.querySelector('.lbl-veh').textContent = tipo === TIPO_DESPLAZAMIENTO ? 'Vehículo (obligatorio)'
+      : tipo === TIPO_MANT_VEH ? 'Vehículo (o apero)' : 'Vehículo';
     // Fin de vuelta (014): solo en tareas con parcela y de tipo POR SUPERFICIE o POR HORAS.
     fs.querySelector('[data-vuelta]').hidden = !requiereFinVuelta(
       { tarea: fs.querySelector('[name=tarea]').value, parcela: fs.querySelector('[name=parcela]').value }, cat);
   }
   const leerLineas = () => [...cont.querySelectorAll('.linea')].map((f) => {
     const v = (n) => f.querySelector(`[name=${n}]`).value;
-    const personal = tipoTarea(cat, v('tarea')) === TIPO_PERSONAL;
-    const opcional = (n) => (personal ? null : v(n) || null);
+    // Los campos ocultos por el tipo de tarea se envían vacíos.
+    const opcional = (n) => (f.querySelector(`[name=${n}]`).closest('label').hidden ? null : v(n) || null);
     const l = { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
       vehiculo: opcional('l_vehiculo'), apero: opcional('apero'), h_ini: v('h_ini'), h_fin: v('h_fin'), obs: v('l_obs') };
     // Sí / No / sin responder; en las tareas a las que no se aplica, No (como la BD).
@@ -531,7 +532,7 @@ async function viewForm(id) {
       operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent || null, h_sal: fd.h_sal || null,
       t_alm_min: fd.t_alm_min === '' ? null : Number(fd.t_alm_min),
       t_com_min: fd.t_com_min === '' ? null : Number(fd.t_com_min),
-      mat_nave: form.mat_nave.checked, obs: fd.obs,
+      obs: fd.obs,
     };
     // Solo el ADMIN envía horas extra corregidas; para el resto la BD las calcula.
     if (esAdmin) {
@@ -542,7 +543,7 @@ async function viewForm(id) {
     const msg = main.querySelector('#form-msg');
     // Se valida con los valores que guardará la BD (los vacíos ya sustituidos).
     const errores = validarParte(conValoresIniciales(nuevaCab, ini), nuevasLineas, cat);
-    const sinTareas = errorSinTareas(p?.estado, nuevaCab.mat_nave, nuevasLineas.length);
+    const sinTareas = errorSinTareas(p?.estado, nuevasLineas, cat);
     if (sinTareas) errores.push(`${sinTareas}.`);
     // Un parte ya cerrado no puede quedar con tareas sin responder (014). En Pendiente se permite.
     const sinResponder = p && p.estado !== 'Pendiente'
