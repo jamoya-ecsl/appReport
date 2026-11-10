@@ -25,8 +25,8 @@ function traducir(error) {
     else if (/pausas_ok/.test(m)) e.message = 'El almuerzo y la comida no pueden ser negativos ni sumar más que la jornada.';
     else e.message = 'Datos no válidos: revisa las horas o, si rechazas, el comentario.';
   } else if (c === 'PGRST202') {
-    e.message = 'Falta una función de la app en Supabase (guardar_parte, cerrar_parte, revisar_parte o borrar_parte).';
-    e.hint = 'Hay que aplicar las migraciones 009, 010a y 010.';
+    e.message = 'Falta una función de la app en Supabase (guardar_cabecera, guardar_linea, borrar_linea, cerrar_parte, revisar_parte o borrar_parte).';
+    e.hint = 'Hay que aplicar las migraciones hasta la 019.';
   }
   else if (c === '42501') e.message = 'No tienes permiso para esta operación.';
   else if (c === 'PGRST116') e.message = 'Parte no encontrado o sin permiso.';
@@ -77,6 +77,13 @@ const normParte = (r) => {
   };
 };
 const normLinea = (l) => ({ ...l, h_ini: hhmm(l.h_ini), h_fin: hhmm(l.h_fin) });
+
+// Jornada de la app → formato de guardar_parte() / guardar_cabecera(). Desde la 012, entrada, salida,
+// almuerzo o comida vacíos se envían vacíos (null) y la BD pone el valor de la configuración; 0 minutos es 0.
+const minutos = (v) => (v == null || v === '' ? null : `${Number(v)} minutes`);
+const cabParaBd = (cab) => ({
+  ...cab, h_ent: cab.h_ent || null, h_sal: cab.h_sal || null, t_alm: minutos(cab.t_alm_min), t_com: minutos(cab.t_com_min),
+});
 
 export function createSupabaseApi(cfg) {
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
@@ -168,12 +175,21 @@ export function createSupabaseApi(cfg) {
     // Desde la 012, entrada, salida, almuerzo o comida vacíos se envían vacíos (null) y la BD pone el
     // valor de la configuración; 0 minutos se envía como 0.
     async saveParte({ id_parte, cab, lineas }) {
-      const min = (v) => (v == null || v === '' ? null : `${Number(v)} minutes`);
-      return ok(await sb.rpc('guardar_parte', {
-        p_id_parte: id_parte || null,
-        p_cab: { ...cab, h_ent: cab.h_ent || null, h_sal: cab.h_sal || null, t_alm: min(cab.t_alm_min), t_com: min(cab.t_com_min) },
-        p_lineas: lineas,
-      }));
+      return ok(await sb.rpc('guardar_parte', { p_id_parte: id_parte || null, p_cab: cabParaBd(cab), p_lineas: lineas }));
+    },
+
+    // ---------- Guardar por partes (migración 019): la jornada y cada línea por separado ----------
+    // Crea (id vacío) o edita la jornada → id_parte. Si ya hay líneas, la BD comprueba que siguen dentro.
+    async guardarCabecera(idParte, cab) {
+      return ok(await sb.rpc('guardar_cabecera', { p_id_parte: idParte || null, p_cab: cabParaBd(cab) }));
+    },
+    // Crea (sin id_linea) o edita una línea → id_linea. La BD valida el orden y el parte completo.
+    async guardarLinea(idParte, linea) {
+      return ok(await sb.rpc('guardar_linea', { p_id_parte: idParte, p_linea: linea }));
+    },
+    // Quita una línea si el resto del parte sigue siendo válido.
+    async borrarLinea(idLinea) {
+      ok(await sb.rpc('borrar_linea', { p_id_linea: idLinea }));
     },
 
     // Cambios de estado y borrado solo mediante funciones (migración 010).

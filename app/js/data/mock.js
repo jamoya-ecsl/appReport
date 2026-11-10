@@ -5,7 +5,7 @@
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
   normalizarFinVuelta, errorFinVuelta, errorFechaArchivada, filasResumen, calcVueltas,
-  puedeGenerarPdf, fechaLocal,
+  puedeGenerarPdf, fechaLocal, errorOrdenLinea,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
@@ -126,6 +126,9 @@ export function createMockApi(reason) {
     fincas: [...new Set(lineasDe(p.id_parte).map((l) => l.finca).filter(Boolean))],
   });
   const lineaConHoras = (l) => ({ ...l, t_horas: calcHoras(l.h_ini, l.h_fin) });
+  // Jornada guardada de un parte, en el formato que recibe saveParte (para guardar una línea suelta).
+  const cabDe = (p) => ({ fecha: p.fecha, h_ent: p.h_ent, h_sal: p.h_sal, t_alm_min: p.t_alm_min, t_com_min: p.t_com_min,
+    obs: p.obs, h_ext: p.h_ext, h_ext_manual: p.h_ext_manual });
   const exigirSesion = () => { if (!yo()) throw new Error('Sesión no iniciada.'); };
   const ultimoArchivo = () => db.archivos.reduce((m, a) => (a.hasta > m ? a.hasta : m), '') || null;
   const esGestorActual = () => { exigirSesion(); return esGestor(yo()); };
@@ -237,9 +240,36 @@ export function createMockApi(reason) {
       });
       Object.assign(p, campos, hExt, { operario, fch_modificacion: ahora });
       db.lineas = db.lineas.filter((l) => l.id_parte !== p.id_parte)
-        .concat(lineas.map((l, i) => ({ ...l, id_linea: `l-${p.id_parte}-${i}-${Date.now()}`, id_parte: p.id_parte })));
+        .concat(lineas.map((l, i) => ({ ...l, id_linea: l.id_linea || `l-${p.id_parte}-${i}-${Date.now()}`, id_parte: p.id_parte })));
       guardar();
       return p.id_parte;
+    },
+
+    // ---------- Guardar por partes, como guardar_cabecera(), guardar_linea() y borrar_linea() (019) ----------
+    // Reutilizan saveParte con el parte completo: mismos permisos y misma validación.
+    async guardarCabecera(idParte, cab) {
+      return this.saveParte({ id_parte: idParte, cab, lineas: idParte ? lineasDe(idParte) : [] });
+    },
+    async guardarLinea(idParte, linea) {
+      exigirSesion();
+      const p = db.partes.find((x) => x.id_parte === idParte);
+      if (!p || !visible(p) || !puedeEditar(yo(), p)) throw new Error('Parte no encontrado o sin permiso para editarlo');
+      const actuales = lineasDe(idParte);
+      const eOrden = errorOrdenLinea(actuales, linea);
+      if (eOrden) throw new Error(eOrden);
+      const id = linea.id_linea || `l-${idParte}-${Date.now()}`;
+      const nuevas = linea.id_linea
+        ? actuales.map((l) => (l.id_linea === linea.id_linea ? { ...linea, id_parte: idParte } : l))
+        : [...actuales, { ...linea, id_linea: id, id_parte: idParte }];
+      await this.saveParte({ id_parte: idParte, cab: cabDe(p), lineas: nuevas });
+      return id;
+    },
+    async borrarLinea(idLinea) {
+      exigirSesion();
+      const l = db.lineas.find((x) => x.id_linea === idLinea);
+      const p = l && db.partes.find((x) => x.id_parte === l.id_parte);
+      if (!p || !visible(p) || !puedeEditar(yo(), p)) throw new Error('Línea no encontrada o sin permiso para editarla');
+      await this.saveParte({ id_parte: p.id_parte, cab: cabDe(p), lineas: lineasDe(p.id_parte).filter((x) => x.id_linea !== idLinea) });
     },
 
     // Mismas reglas que cerrar_parte(), revisar_parte() y borrar_parte() de la migración 010.

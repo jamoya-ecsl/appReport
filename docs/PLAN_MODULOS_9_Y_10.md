@@ -7,7 +7,7 @@ Plan acordado el 10/11/2026. Estado de cada paso al final del documento.
 - **Validación por línea:** cada línea se valida **y se guarda** al pulsar "Aceptar". El parte se crea al
   aceptar la jornada (así también existen partes sin tareas mientras se rellenan).
 - **Orden:** las líneas se meten en orden de hora. Cada línea nueva empieza cuando acaba la última o más tarde.
-- **Pantalla del parte en 3 pestañas:** Cabecera, Tareas y Mantenimiento.
+- **Pantalla del parte en 2 pestañas** (cambio del 10/11; antes eran 3): **Jornada** (cabecera y su resumen) y **Líneas del parte** (tareas y mantenimientos juntos, en un solo horario).
 - **Mantenimiento como tarea:** se elimina la tabla `partes_mant` y la casilla `mat_nave`. Se crean dos tipos de
   tarea nuevos, **MANTENIMIENTO NAVE** y **MANTENIMIENTO VEHÍCULOS**, que forman parte del ciclo normal de tareas
   (`partes_det`).
@@ -34,21 +34,20 @@ No hay datos que migrar.
   (sustituye a la regla de `mat_nave`).
 - `fin_vuelta` no se pregunta en los mantenimientos (se guarda No).
 
-## Pantalla
+## Pantalla (2 pestañas, decisión del 10/11/2026)
 
-1. **Cabecera:** operario, fecha, entrada y salida, almuerzo y comida, horas extra (solo el ADMIN) y
-   observaciones. Con **"Aceptar jornada"** se crea el parte en Pendiente; las otras pestañas se activan
-   cuando existe. Muestra un resumen: jornada, horas de tareas, horas de mantenimiento y tiempo sin asignar.
-2. **Tareas:** DESPLAZAMIENTO, POR HORAS, POR SUPERFICIE y MOTIVOS PERSONALES.
-3. **Mantenimiento:** MANTENIMIENTO NAVE y MANTENIMIENTO VEHÍCULOS.
-
-En las dos pestañas de líneas:
-- "+ Añadir" abre una sola línea con **Aceptar** y **Cancelar**. Al aceptar se valida contra todas las líneas
-  del día (las dos pestañas) y se guarda. Los errores salen debajo de la línea.
-- La línea nueva propone como inicio el fin de la última línea del día, de cualquier pestaña. Se muestra cuál es.
-- Una sola línea abierta en todo el parte. Aviso al cambiar de pestaña o de pantalla con una línea sin aceptar.
-- Editar o quitar una línea se permite si el resto del día sigue siendo válido.
-- Cambiar la jornada se rechaza si deja alguna línea fuera; el mensaje dice cuáles.
+1. **Jornada:** operario, fecha, entrada y salida, almuerzo y comida, horas extra (solo el ADMIN) y
+   observaciones. Con **"Aceptar jornada"** se crea el parte en Pendiente y se activa la otra pestaña.
+   Debajo, el resumen: total de la jornada, horas de tareas, de mantenimiento y de motivos personales,
+   horas sin asignar, nº de líneas y horas extra.
+2. **Líneas del parte:** todas las líneas juntas (tareas, desplazamientos, mantenimientos y motivos
+   personales), en orden de hora.
+   - "+ Añadir línea" abre una sola línea con **Aceptar** y **Cancelar**. Al aceptar se valida y se guarda;
+     los errores salen debajo de la línea.
+   - La línea nueva propone como inicio el fin de la última, y repite finca, vehículo y apero.
+   - Una sola línea abierta a la vez. Aviso al salir de la pantalla con una línea sin aceptar.
+   - Editar o quitar una línea se permite si el resto del parte sigue siendo válido.
+   - Cambiar la jornada se rechaza si deja alguna línea fuera; el mensaje dice cuáles.
 
 Detalle y PDF: tareas y mantenimientos en dos tablas separadas; desaparece "Mant. nave".
 
@@ -61,7 +60,7 @@ Detalle y PDF: tareas y mantenimientos en dos tablas separadas; desaparece "Mant
 | 2 | **018** mantenimiento como tarea: tipos y tareas nuevos; `validar_parte()`; regla de cierre (disparador de estado); quitar `mat_nave` de `guardar_parte()`, `pdf_datos()` y `panel_resumen()`; borrar `partes_mant` y `mat_nave` (comprobando antes que están vacías). Irreversible: se aplica solo con autorización | Hecho 10/11: 018 aplicada y verificada 14/14; app y `generar-pdf` (v2 desplegada) adaptadas |
 | 3 | **019** validación por línea: `guardar_cabecera()`, `guardar_linea()`, `borrar_linea()` con regla de orden y permisos actuales. `guardar_parte()` se mantiene por compatibilidad | Hecho 10/11: 019 aplicada y verificada 14/14 |
 | 4 | Función `generar-pdf`: sección de mantenimientos, sin `mat_nave` | Pendiente |
-| 5 | App: `rules.js` (tipos nuevos, `validarLinea`), `supabase.js` y `mock.js` (funciones nuevas), `main.js` (formulario en 3 pestañas; detalle y lista sin nave) | Pendiente |
+| 5 | App: `rules.js` (tipos nuevos, `validarLinea`), `supabase.js` y `mock.js` (funciones nuevas), `main.js` (formulario en 3 pestañas; detalle y lista sin nave) | Hecho 10/11 con 2 pestañas (Jornada · Líneas del parte); probado en el navegador en modo demo |
 | 6 | Pruebas: `pruebas_modulo9.sql` (mantenimiento), `pruebas_modulo10.sql` (por línea); adaptar las de los módulos 1 a 8 que usan `mat_nave` | Pendiente |
 | 7 | Documentación: decisiones, `supabase/README.md`, `docs/BOCETO.md` | Pendiente |
 

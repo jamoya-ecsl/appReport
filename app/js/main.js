@@ -1,18 +1,21 @@
 // Boceto funcional "Partes de Trabajo". Navegación por hash:
-//   #/login · #/inicio · #/partes?filtros · #/partes/nuevo · #/partes/:id · #/partes/:id/editar
+//   #/login · #/inicio · #/partes?filtros · #/partes/nuevo · #/partes/:id · #/partes/:id/editar[?tab=lineas]
 //   #/archivo?filtros (vueltas, exportaciones y archivo; solo ADMIN y SUPERVISOR)
 import { createApi } from './data/index.js';
 import { esc, fmtFecha, fmtFechaHora, fmtHoras, badge, loadingHtml, emptyHtml, errorHtml, toast, options } from './ui.js';
 import {
-  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_MANT_VEH, soloHoras, sinFinca, esGestor, puedeEditar, motivoNoEditable,
-  puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
-  calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
-  VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
+  ESTADOS, TIPO_DESPLAZAMIENTO, TIPO_PERSONAL, TIPO_MANT_VEH, TIPOS_MANTENIMIENTO, soloHoras, sinFinca,
+  esGestor, puedeEditar, motivoNoEditable, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
+  calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, validarLinea, tipoTarea, etiquetaTipo, ordenarLineas,
+  VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros,
   requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv, puedeGenerarPdf, fechaLocal,
 } from './rules.js';
 
 const root = document.getElementById('app');
-const st = { api: null, user: null, cat: null, operarios: [] };
+// lineaAbierta: hay una línea del parte sin aceptar (formulario del parte, 019); hashFormulario: su dirección.
+const st = { api: null, user: null, cat: null, operarios: [], lineaAbierta: false, hashFormulario: null, saltarRuta: false };
+const AVISO_LINEA = 'Tienes una línea del parte sin aceptar. Si sales, se pierde. ¿Salir de todas formas?';
+window.addEventListener('beforeunload', (ev) => { if (st.lineaAbierta) { ev.preventDefault(); ev.returnValue = ''; } });
 
 const nombreOperario = (cod) => st.operarios.find((o) => o.cod_ope === cod)?.usuario || cod || '—';
 const nombreFinca = (cod) => st.cat?.fincas.find((f) => f.cod_fin === cod)?.finca || cod || '—';
@@ -50,6 +53,12 @@ function parseHash() {
 }
 
 async function route() {
+  // Salir del formulario del parte con una línea sin aceptar: se pregunta y, si no, se vuelve a él.
+  if (st.saltarRuta) { st.saltarRuta = false; return; }
+  if (st.lineaAbierta && location.hash !== st.hashFormulario) {
+    if (!confirm(AVISO_LINEA)) { st.saltarRuta = true; location.hash = st.hashFormulario; return; }
+    st.lineaAbierta = false;
+  }
   const { parts, query } = parseHash();
   if (!st.user && parts[0] !== 'login') { location.hash = '#/login'; return; }
   if (st.user && parts[0] === 'login') { location.hash = '#/inicio'; return; }
@@ -67,7 +76,7 @@ async function route() {
   if (parts[0] === 'inicio') return viewInicio();
   if (parts[0] === 'partes' && !parts[1]) return viewLista(query);
   if (parts[0] === 'partes' && parts[1] === 'nuevo') return viewForm(null);
-  if (parts[0] === 'partes' && parts[2] === 'editar') return viewForm(parts[1]);
+  if (parts[0] === 'partes' && parts[2] === 'editar') return viewForm(parts[1], query.tab);
   if (parts[0] === 'partes') return viewDetalle(parts[1]);
   if (parts[0] === 'archivo' && esGestor(st.user)) return viewArchivo(query);
   shell(emptyHtml('Esta pantalla no existe.', '<a class="button" href="#/inicio">Volver al inicio</a>'));
@@ -99,7 +108,7 @@ function shell(html) {
     <main id="main">${html}</main>`;
   root.querySelector('[data-action=logout]')?.addEventListener('click', async () => {
     await st.api.signOut();
-    Object.assign(st, { user: null, cat: null, operarios: [] });
+    Object.assign(st, { user: null, cat: null, operarios: [], lineaAbierta: false });
     location.hash = '#/login';
   });
   root.querySelector('[data-action=reset]')?.addEventListener('click', () => { st.api.reset(); location.reload(); });
@@ -252,7 +261,8 @@ async function viewDetalle(id) {
     <div class="page-head">
       <h1>Parte nº ${esc(p.num_parte)} ${badge(p.estado)}</h1>
       <div class="row">
-        ${puedeEditar(u, p) ? `<a class="button secondary" href="#/partes/${esc(p.id_parte)}/editar">Editar</a>` : ''}
+        ${puedeEditar(u, p) ? `<a class="button secondary" href="#/partes/${esc(p.id_parte)}/editar">Editar jornada</a>
+          <a class="button secondary" href="#/partes/${esc(p.id_parte)}/editar?tab=lineas">Editar líneas</a>` : ''}
         ${puedeCerrar(u, p) ? '<button type="button" id="b-cerrar">Cerrar parte</button>' : ''}
         ${puedeBorrar(u) ? '<button type="button" class="danger" id="b-borrar">Borrar</button>' : ''}
       </div>
@@ -358,13 +368,17 @@ async function viewDetalle(id) {
   }));
 }
 
-// ---------- Nuevo / editar parte (cabecera + líneas) ----------
-async function viewForm(id) {
+// ---------- Nuevo / editar parte: pestañas Jornada y Líneas del parte (migración 019) ----------
+// La jornada se acepta (y se guarda) por un lado; cada línea, por otro, al pulsar "Aceptar".
+async function viewForm(id, tabInicial) {
   const u = st.user;
+  const { cat } = st;
   const main = shell(loadingHtml('Preparando formulario…'));
+  st.lineaAbierta = false;
+  st.hashFormulario = location.hash;
   let p = null;
   if (id) {
-    try { p = await st.api.getParte(id); } catch (e) { return showError(main, e, () => viewForm(id)); }
+    try { p = await st.api.getParte(id); } catch (e) { return showError(main, e, () => viewForm(id, tabInicial)); }
     if (!puedeEditar(u, p)) {
       main.innerHTML = errorHtml(new Error(motivoNoEditable(u, p)), {
         retry: false, extra: `<a class="button secondary" href="#/partes/${esc(id)}">Ver parte</a>`,
@@ -379,80 +393,181 @@ async function viewForm(id) {
     operario: u.cod_ope, fecha: fechaLocal(), h_ent: ini.h_ent, h_sal: ini.h_sal,
     t_alm_min: ini.t_alm_min, t_com_min: ini.t_com_min, h_ext: 0, h_ext_manual: false, obs: '',
   };
-  const { cat } = st;
   // Horas extra (011): las calcula la BD. Solo el ADMIN ve th_jornada y puede corregirlas a mano.
   const esAdmin = u.rol_app === 'ADMIN';
   let th = null;
   if (esAdmin) { try { th = await st.api.getThJornada(); } catch { th = null; } }
-  // Parte nuevo: se propone una primera línea de DESPLAZAMIENTO que empieza a la hora de entrada.
-  const desplazamiento = cat.tareas.find((t) => t.tipo === TIPO_DESPLAZAMIENTO && t.activo !== false);
-  const lineas = p ? ordenarLineas(p.lineas) : [{ tarea: desplazamiento?.cod_tar || '', h_ini: cab.h_ent }];
   const puedeElegirOperario = !id && puedeCrearParaOtros(u);  // ADMIN y SUPERVISOR (013)
+  let lineas = p ? ordenarLineas(p.lineas) : [];
 
   main.innerHTML = `
-    <a class="link" href="${id ? `#/partes/${esc(id)}` : '#/partes'}">← Cancelar</a>
-    <h1>${id ? `Editar parte nº ${esc(p.num_parte)}` : 'Nuevo parte'}</h1>
-    <form id="f-parte" novalidate>
-      <section class="card"><h2>Jornada</h2><div class="form-grid">
-        <label>Operario ${puedeElegirOperario
-          ? `<select name="operario">${options(st.operarios.filter((o) => o.activo), cab.operario, 'cod_ope', (o) => o.usuario)}</select>`
-          : `<input value="${esc(nombreOperario(cab.operario))}" disabled><input type="hidden" name="operario" value="${esc(cab.operario)}">`}</label>
-        <label>Fecha <input type="date" name="fecha" value="${esc(cab.fecha)}" required></label>
-        <label>Hora entrada <input type="time" step="900" name="h_ent" value="${esc(cab.h_ent)}"></label>
-        <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}"></label>
-        <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}" placeholder="${esc(ini.t_alm_min)}"></label>
-        <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}" placeholder="${esc(ini.t_com_min)}"></label>
-        <p class="muted wide">Si dejas vacía la entrada, la salida, el almuerzo o la comida, se usa el valor por defecto:
-          ${esc(ini.h_ent)} – ${esc(ini.h_sal)}, ${esc(ini.t_alm_min)} min de almuerzo y ${esc(ini.t_com_min)} de comida.
-          Si no has parado, escribe 0.</p>
-        ${esAdmin ? `
-        <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}" ${cab.h_ext_manual ? '' : 'disabled'}>
-          <span class="muted" id="hext-auto"></span></label>
-        <label class="check"><input type="checkbox" name="h_ext_manual" ${cab.h_ext_manual ? 'checked' : ''}> Corregir horas extra a mano</label>`
-        : `<label>Horas extra <input value="${id ? esc(fmtHoras(cab.h_ext)) : ''}" placeholder="Se calculan al guardar" disabled>
-          <span class="muted">Las calcula el sistema según la jornada.</span></label>`}
-        <label class="wide">Observaciones <textarea name="obs" rows="2">${esc(cab.obs || '')}</textarea></label>
-      </div>
-      <p class="total">Total jornada: <strong id="tot">—</strong></p></section>
+    <a class="link" href="${id ? `#/partes/${esc(id)}` : '#/partes'}">← ${id ? 'Ver el parte' : 'Cancelar'}</a>
+    <h1>${id ? `Parte nº ${esc(p.num_parte)} ${badge(p.estado)}` : 'Nuevo parte'}</h1>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="jornada">Jornada</button>
+      <button type="button" role="tab" data-tab="lineas" ${id ? '' : 'disabled title="Acepta primero la jornada"'}>Líneas del parte <span id="n-lineas" class="muted"></span></button>
+    </div>
 
-      <section class="card"><div class="page-head"><h2>Tareas realizadas</h2>
-        <button type="button" class="secondary" id="add-linea">+ Añadir tarea</button></div>
-        <p class="muted">Horas en intervalos de 15 minutos. La primera tarea (sin contar MOTIVOS PERSONALES) es un
-          DESPLAZAMIENTO con finca y vehículo o un MANTENIMIENTO NAVE; para trabajar en una finca o cambiar de finca,
-          añade un DESPLAZAMIENTO. Los mantenimientos no llevan finca: el de vehículos lleva vehículo o apero.
-          Las tareas se ordenan por hora de inicio y no pueden solaparse.</p>
-        <div id="lineas"></div>
-        <p class="muted" id="sin-lineas">Aún no hay tareas.</p>
-      </section>
+    <section id="tab-jornada" role="tabpanel">
+      <form id="f-cab" class="card" novalidate>
+        <div class="form-grid">
+          <label>Operario ${puedeElegirOperario
+            ? `<select name="operario">${options(st.operarios.filter((o) => o.activo), cab.operario, 'cod_ope', (o) => o.usuario)}</select>`
+            : `<input value="${esc(nombreOperario(cab.operario))}" disabled><input type="hidden" name="operario" value="${esc(cab.operario)}">`}</label>
+          <label>Fecha <input type="date" name="fecha" value="${esc(cab.fecha)}" required></label>
+          <label>Hora entrada <input type="time" step="900" name="h_ent" value="${esc(cab.h_ent)}"></label>
+          <label>Hora salida <input type="time" step="900" name="h_sal" value="${esc(cab.h_sal)}"></label>
+          <label>Almuerzo (min) <input type="number" min="0" step="15" name="t_alm_min" value="${esc(cab.t_alm_min)}" placeholder="${esc(ini.t_alm_min)}"></label>
+          <label>Comida (min) <input type="number" min="0" step="15" name="t_com_min" value="${esc(cab.t_com_min)}" placeholder="${esc(ini.t_com_min)}"></label>
+          <p class="muted wide">Si dejas vacía la entrada, la salida, el almuerzo o la comida, se usa el valor por defecto:
+            ${esc(ini.h_ent)} – ${esc(ini.h_sal)}, ${esc(ini.t_alm_min)} min de almuerzo y ${esc(ini.t_com_min)} de comida.
+            Si no has parado, escribe 0.</p>
+          ${esAdmin ? `
+          <label>Horas extra <input type="number" min="0" step="0.25" name="h_ext" value="${esc(cab.h_ext)}" ${cab.h_ext_manual ? '' : 'disabled'}>
+            <span class="muted" id="hext-auto"></span></label>
+          <label class="check"><input type="checkbox" name="h_ext_manual" ${cab.h_ext_manual ? 'checked' : ''}> Corregir horas extra a mano</label>`
+          : `<label>Horas extra <input value="${id ? esc(fmtHoras(cab.h_ext)) : ''}" placeholder="Se calculan al guardar" disabled>
+            <span class="muted">Las calcula el sistema según la jornada.</span></label>`}
+          <label class="wide">Observaciones <textarea name="obs" rows="2">${esc(cab.obs || '')}</textarea></label>
+        </div>
+        <div id="cab-msg"></div>
+        <div class="row"><button type="submit" id="b-cab">${id ? 'Aceptar cambios de la jornada' : 'Aceptar jornada'}</button>
+          ${id ? '' : '<span class="muted">Al aceptar se crea el parte y pasas a meter sus líneas.</span>'}</div>
+      </form>
+      <section class="card"><h2>Resumen</h2><dl class="grid" id="resumen"></dl></section>
+    </section>
 
-      <div id="form-msg"></div>
-      <div class="row sticky-actions"><button type="submit" id="guardar">${id ? 'Guardar cambios' : 'Crear parte'}</button></div>
-    </form>`;
+    <section id="tab-lineas" class="card" role="tabpanel" hidden>
+      <div class="page-head"><h2>Líneas del parte</h2>
+        <button type="button" class="secondary" id="add-linea">+ Añadir línea</button></div>
+      <p class="muted">Cada línea se comprueba y se guarda al pulsar <strong>Aceptar</strong>. Van en orden de hora, en tramos de
+        15 minutos: una línea nueva empieza cuando acaba la anterior o más tarde. La primera (sin contar MOTIVOS PERSONALES)
+        es un DESPLAZAMIENTO o un MANTENIMIENTO NAVE; para trabajar en una finca o cambiar de finca hace falta un
+        DESPLAZAMIENTO. Los mantenimientos no llevan finca: el de vehículos lleva vehículo o apero.</p>
+      <div id="tabla-lineas"></div>
+      <div id="editor"></div>
+      <div id="lin-msg"></div>
+      ${id ? `<p><a class="button secondary" href="#/partes/${esc(id)}">Terminado: ver el parte</a></p>` : ''}
+    </section>`;
 
-  const form = main.querySelector('#f-parte');
-  const cont = main.querySelector('#lineas');
+  const form = main.querySelector('#f-cab');
+  const editor = main.querySelector('#editor');
+  const linMsg = main.querySelector('#lin-msg');
 
+  // ----- Pestañas -----
+  function mostrarTab(t) {
+    main.querySelectorAll('[data-tab]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.tab === t);
+      b.setAttribute('aria-selected', String(b.dataset.tab === t));
+    });
+    main.querySelector('#tab-jornada').hidden = t !== 'jornada';
+    main.querySelector('#tab-lineas').hidden = t !== 'lineas';
+  }
+  main.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => mostrarTab(b.dataset.tab)));
+
+  // ----- Jornada y resumen -----
+  const leerCab = () => {
+    const fd = Object.fromEntries(new FormData(form));
+    const c = {
+      // Vacío se envía vacío: la BD pone el valor de la configuración (012).
+      operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent || null, h_sal: fd.h_sal || null,
+      t_alm_min: fd.t_alm_min === '' ? null : Number(fd.t_alm_min),
+      t_com_min: fd.t_com_min === '' ? null : Number(fd.t_com_min),
+      obs: fd.obs,
+    };
+    // Solo el ADMIN envía horas extra corregidas; para el resto la BD las calcula.
+    if (esAdmin) {
+      c.h_ext_manual = form.h_ext_manual.checked;
+      if (c.h_ext_manual) c.h_ext = Number(form.h_ext.value) || 0;
+    }
+    return c;
+  };
+  function pintarResumen() {
+    const datos = conValoresIniciales(leerCab(), ini);
+    const tot = calcTotHoras(datos);
+    const horasDe = (filtro) => lineas.filter((l) => filtro(tipoTarea(cat, l.tarea)))
+      .reduce((s, l) => s + (calcHoras(l.h_ini, l.h_fin) || 0), 0);
+    const mant = horasDe((t) => TIPOS_MANTENIMIENTO.includes(t));
+    const pers = horasDe((t) => t === TIPO_PERSONAL);
+    const tareas = horasDe((t) => t !== TIPO_PERSONAL && !TIPOS_MANTENIMIENTO.includes(t));
+    const enLineas = mant + pers + tareas;
+    const campo = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+    main.querySelector('#resumen').innerHTML = [
+      campo('Total jornada', `<strong>${fmtHoras(tot)}</strong>`),
+      campo('Horas de tareas', fmtHoras(tareas)),
+      campo('Horas de mantenimiento', fmtHoras(mant)),
+      campo('Motivos personales', fmtHoras(pers)),
+      campo('Sin asignar a líneas', tot == null ? '—' : fmtHoras(Math.max(tot - enLineas, 0))),
+      campo('Líneas', String(lineas.length)),
+      campo('Horas extra', esAdmin && th != null ? fmtHoras(form.h_ext_manual.checked ? Number(form.h_ext.value) || 0 : calcHExt(datos, th))
+        : id ? fmtHoras(p.h_ext) : 'Se calculan al guardar'),
+    ].join('');
+    main.querySelector('#n-lineas').textContent = lineas.length ? `(${lineas.length})` : '';
+  }
+  function refrescarCab() {
+    if (esAdmin) {
+      const datos = conValoresIniciales(leerCab(), ini);
+      const manual = form.h_ext_manual.checked;
+      const auto = calcHExt(datos, th);
+      form.h_ext.disabled = !manual;
+      if (!manual && auto != null) form.h_ext.value = auto;
+      main.querySelector('#hext-auto').textContent = th == null ? 'Se calculan al guardar.'
+        : `Calculadas: ${fmtHoras(auto)} (jornada de ${fmtHoras(th)})`;
+    }
+    pintarResumen();
+  }
+  form.addEventListener('input', refrescarCab);
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const nuevaCab = leerCab();
+    const msg = main.querySelector('#cab-msg');
+    // Se valida con los valores que guardará la BD (los vacíos ya sustituidos) y con las líneas ya aceptadas.
+    const errores = validarParte(conValoresIniciales(nuevaCab, ini), lineas, cat);
+    if (errores.length) { msg.innerHTML = listaErrores(errores); return; }
+    const b = main.querySelector('#b-cab');
+    b.disabled = true; msg.innerHTML = '';
+    try {
+      const idGuardado = await st.api.guardarCabecera(id, nuevaCab);
+      if (!id) {
+        toast('Parte creado. Ahora añade sus líneas.');
+        location.hash = `#/partes/${idGuardado}/editar?tab=lineas`;
+        return;
+      }
+      toast('Jornada guardada.');
+      p = await st.api.getParte(id);
+      lineas = ordenarLineas(p.lineas);
+      pintarResumen();
+    } catch (e) { msg.innerHTML = errorHtml(e, { retry: false }); } finally { b.disabled = false; }
+  });
+
+  // ----- Líneas -----
   const parcelasDe = (finca) => cat.parcelas.filter((x) => !finca || x.finca === finca);
   const etiquetaParcela = (x) => `${x.nom_parc} (${x.superficie ?? '?'} ha)`;
-  function lineaHtml(l = {}) {
-    const finca = l.finca || '';
-    return `<fieldset class="linea">
-      <label>Tarea <select name="tarea">${options(cat.tareas, l.tarea, 'cod_tar', (t) => `${t.tareas} (${etiquetaTipo(t.tipo)})`)}</select></label>
-      <label data-campo data-finca>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca)}</select></label>
-      <label data-campo data-finca>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
-      <label data-campo><span class="lbl-veh">Vehículo</span> <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
-      <label data-campo>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
-      <label data-vuelta>Fin de vuelta <select name="fin_vuelta">
-        <option value="" ${l.fin_vuelta == null ? 'selected' : ''}>— Sin responder —</option>
-        <option value="true" ${l.fin_vuelta === true ? 'selected' : ''}>Sí, termina la vuelta</option>
-        <option value="false" ${l.fin_vuelta === false ? 'selected' : ''}>No</option></select></label>
-      <label>Inicio <input type="time" step="900" name="h_ini" value="${esc(l.h_ini || '')}"></label>
-      <label>Fin <input type="time" step="900" name="h_fin" value="${esc(l.h_fin || '')}"></label>
-      <label class="wide">Obs. <input name="l_obs" value="${esc(l.obs || '')}"></label>
-      <input type="hidden" name="id_linea" value="${esc(l.id_linea || '')}">
-      <button type="button" class="link danger quitar">Quitar</button>
-    </fieldset>`;
+  const etiquetaTarea = (cod) => { const t = cat.tareas.find((x) => x.cod_tar === cod); return t ? `${t.tareas} (${etiquetaTipo(t.tipo)})` : cod; };
+
+  function pintarLineas() {
+    const cont = main.querySelector('#tabla-lineas');
+    const abierta = st.lineaAbierta;
+    if (!lineas.length) {
+      cont.innerHTML = emptyHtml('Aún no hay líneas. Empieza con un DESPLAZAMIENTO o un MANTENIMIENTO NAVE.');
+    } else {
+      cont.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Horario</th><th>Horas</th><th>Tarea</th><th>Finca</th><th>Parcela</th><th>Vehículo</th><th>Apero</th><th>Fin de vuelta</th><th>Obs.</th><th></th></tr></thead>
+        <tbody>${lineas.map((l) => `<tr data-id="${esc(l.id_linea)}" ${editor.dataset.editando === l.id_linea ? 'class="editando"' : ''}>
+          <td>${esc(l.h_ini)}–${esc(l.h_fin)}</td><td>${fmtHoras(calcHoras(l.h_ini, l.h_fin))}</td>
+          <td>${esc(etiquetaTarea(l.tarea))}</td><td>${esc(l.finca ? nombreFinca(l.finca) : '—')}</td>
+          <td>${esc(l.parcela ? nombreParcela(l.parcela) : '—')}</td><td>${esc(l.vehiculo ? nombreVehiculo(l.vehiculo) : '—')}</td>
+          <td>${esc(l.apero ? nombreApero(l.apero) : '—')}</td>
+          <td>${requiereFinVuelta(l, cat) && l.fin_vuelta == null ? '<strong class="pendiente">Sin responder</strong>' : esc(textoFinVuelta(l, cat))}</td>
+          <td>${esc(l.obs || '')}</td>
+          <td class="acciones"><button type="button" class="link" data-editar ${abierta ? 'disabled' : ''}>Editar</button>
+            <button type="button" class="link danger" data-quitar ${abierta ? 'disabled' : ''}>Quitar</button></td></tr>`).join('')}
+        </tbody></table></div>`;
+    }
+    main.querySelector('#add-linea').disabled = abierta;
+    pintarResumen();
   }
+
   // Campos según el tipo de tarea (018): MOTIVOS PERSONALES y MANTENIMIENTO NAVE solo llevan horas;
   // MANTENIMIENTO VEHÍCULOS, vehículo o apero sin finca ni parcela; DESPLAZAMIENTO exige vehículo.
   function aplicarTipo(fs) {
@@ -468,104 +583,124 @@ async function viewForm(id) {
     fs.querySelector('[data-vuelta]').hidden = !requiereFinVuelta(
       { tarea: fs.querySelector('[name=tarea]').value, parcela: fs.querySelector('[name=parcela]').value }, cat);
   }
-  const leerLineas = () => [...cont.querySelectorAll('.linea')].map((f) => {
-    const v = (n) => f.querySelector(`[name=${n}]`).value;
+
+  // Propuesta para una línea nueva: empieza cuando acaba la última y repite finca, vehículo y apero
+  // de la última que los tenga. La primera del parte propone un DESPLAZAMIENTO a la hora de entrada.
+  function propuesta() {
+    const ultima = lineas[lineas.length - 1];
+    if (!ultima) {
+      const desp = cat.tareas.find((t) => t.tipo === TIPO_DESPLAZAMIENTO && t.activo !== false);
+      return { tarea: desp?.cod_tar || '', h_ini: p?.h_ent || '' };
+    }
+    const conFinca = [...lineas].reverse().find((l) => l.finca);
+    return { h_ini: ultima.h_fin, finca: conFinca?.finca, vehiculo: conFinca?.vehiculo, apero: conFinca?.apero };
+  }
+
+  function abrirEditor(l) {
+    const nueva = !l.id_linea;
+    st.lineaAbierta = true;
+    editor.dataset.editando = l.id_linea || '';
+    const finca = l.finca || '';
+    editor.innerHTML = `<fieldset class="linea editor">
+      <legend>${nueva ? 'Línea nueva' : `Editar la línea ${esc(l.h_ini)}–${esc(l.h_fin)}`}</legend>
+      <label>Tarea <select name="tarea">${options(cat.tareas, l.tarea, 'cod_tar', (t) => `${t.tareas} (${etiquetaTipo(t.tipo)})`)}</select></label>
+      <label>Inicio <input type="time" step="900" name="h_ini" value="${esc(l.h_ini || '')}"></label>
+      <label>Fin <input type="time" step="900" name="h_fin" value="${esc(l.h_fin || '')}"></label>
+      <label data-campo data-finca>Finca <select name="l_finca">${options(cat.fincas, finca, 'cod_fin', (f) => f.finca)}</select></label>
+      <label data-campo data-finca>Parcela <select name="parcela">${options(parcelasDe(finca), l.parcela, 'cod_par', etiquetaParcela, '— Sin parcela —')}</select></label>
+      <label data-campo><span class="lbl-veh">Vehículo</span> <select name="l_vehiculo">${options(cat.vehiculos, l.vehiculo, 'id_mat', (v) => `${v.alias} · ${v.equipo}`, '— Ninguno —')}</select></label>
+      <label data-campo>Apero <select name="apero">${options(cat.aperos, l.apero, 'id_bas', (a) => `${a.alias} · ${a.equipo}`, '— Ninguno —')}</select></label>
+      <label data-vuelta>Fin de vuelta <select name="fin_vuelta">
+        <option value="" ${l.fin_vuelta == null ? 'selected' : ''}>— Sin responder —</option>
+        <option value="true" ${l.fin_vuelta === true ? 'selected' : ''}>Sí, termina la vuelta</option>
+        <option value="false" ${l.fin_vuelta === false ? 'selected' : ''}>No</option></select></label>
+      <label class="wide">Obs. <input name="l_obs" value="${esc(l.obs || '')}"></label>
+      <div class="wide" id="ed-msg"></div>
+      <div class="wide row"><button type="button" id="b-aceptar">Aceptar</button>
+        <button type="button" class="secondary" id="b-cancelar">Cancelar</button></div>
+    </fieldset>`;
+    const fs = editor.querySelector('fieldset');
+    aplicarTipo(fs);
+    fs.addEventListener('change', (ev) => {
+      if (ev.target.name === 'l_finca') {
+        fs.querySelector('[name=parcela]').innerHTML = options(parcelasDe(ev.target.value), '', 'cod_par', etiquetaParcela, '— Sin parcela —');
+      }
+      if (['tarea', 'l_finca', 'parcela'].includes(ev.target.name)) aplicarTipo(fs);
+    });
+    fs.querySelector('#b-cancelar').addEventListener('click', cerrarEditor);
+    fs.querySelector('#b-aceptar').addEventListener('click', () => aceptar(fs, l.id_linea || null));
+    linMsg.innerHTML = '';
+    pintarLineas();
+    fs.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    fs.querySelector(nueva && l.tarea ? '[name=h_fin]' : '[name=tarea]').focus();
+  }
+
+  function cerrarEditor() {
+    st.lineaAbierta = false;
+    editor.dataset.editando = '';
+    editor.innerHTML = '';
+    pintarLineas();
+  }
+
+  function leerEditor(fs, idLinea) {
+    const v = (n) => fs.querySelector(`[name=${n}]`).value;
     // Los campos ocultos por el tipo de tarea se envían vacíos.
-    const opcional = (n) => (f.querySelector(`[name=${n}]`).closest('label').hidden ? null : v(n) || null);
-    const l = { id_linea: v('id_linea') || null, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
+    const opcional = (n) => (fs.querySelector(`[name=${n}]`).closest('label').hidden ? null : v(n) || null);
+    const l = { id_linea: idLinea, tarea: v('tarea'), finca: opcional('l_finca'), parcela: opcional('parcela'),
       vehiculo: opcional('l_vehiculo'), apero: opcional('apero'), h_ini: v('h_ini'), h_fin: v('h_fin'), obs: v('l_obs') };
     // Sí / No / sin responder; en las tareas a las que no se aplica, No (como la BD).
     const fv = v('fin_vuelta');
     l.fin_vuelta = requiereFinVuelta(l, cat) ? (fv === 'true' ? true : fv === 'false' ? false : null) : false;
     return l;
-  });
-  // Valores propuestos para una línea nueva (se pueden cambiar): empieza cuando acaba la última tarea
-  // y repite finca, vehículo y apero de la última tarea que los tenga.
-  function propuestaSiguiente() {
-    const orden = ordenarLineas(leerLineas().filter((l) => l.h_ini));
-    const ultima = orden[orden.length - 1];
-    const conFinca = [...orden].reverse().find((l) => l.finca);
-    return { h_ini: ultima?.h_fin || '', finca: conFinca?.finca, vehiculo: conFinca?.vehiculo, apero: conFinca?.apero };
-  }
-  const addLinea = (l) => {
-    cont.insertAdjacentHTML('beforeend', lineaHtml(l));
-    aplicarTipo(cont.lastElementChild);
-    refrescar();
-  };
-  function refrescar() {
-    const datos = conValoresIniciales(Object.fromEntries(new FormData(form)), ini);
-    const tot = calcTotHoras(datos);
-    main.querySelector('#tot').textContent = fmtHoras(tot);
-    if (esAdmin) {
-      const manual = form.h_ext_manual.checked;
-      const auto = calcHExt(datos, th);
-      form.h_ext.disabled = !manual;
-      if (!manual && auto != null) form.h_ext.value = auto;
-      main.querySelector('#hext-auto').textContent = th == null ? 'Se calculan al guardar.'
-        : `Calculadas: ${fmtHoras(auto)} (jornada de ${fmtHoras(th)})`;
-    }
-    main.querySelector('#sin-lineas').hidden = cont.children.length > 0;
   }
 
-  lineas.forEach(addLinea);
-  refrescar();
-
-  main.querySelector('#add-linea').addEventListener('click', () => addLinea(propuestaSiguiente()));
-  cont.addEventListener('click', (ev) => {
-    if (ev.target.classList.contains('quitar')) { ev.target.closest('.linea').remove(); refrescar(); }
-  });
-  cont.addEventListener('change', (ev) => {
-    const fs = ev.target.closest('.linea');
-    // Parcela dependiente de la finca de la línea
-    if (ev.target.name === 'l_finca') {
-      fs.querySelector('[name=parcela]').innerHTML = options(parcelasDe(ev.target.value), '', 'cod_par', etiquetaParcela, '— Sin parcela —');
-    }
-    if (['tarea', 'l_finca', 'parcela'].includes(ev.target.name)) aplicarTipo(fs);
-  });
-  form.addEventListener('input', refrescar);
-
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const fd = Object.fromEntries(new FormData(form));
-    const nuevaCab = {
-      // Vacío se envía vacío: la BD pone el valor de la configuración (012).
-      operario: fd.operario, fecha: fd.fecha, h_ent: fd.h_ent || null, h_sal: fd.h_sal || null,
-      t_alm_min: fd.t_alm_min === '' ? null : Number(fd.t_alm_min),
-      t_com_min: fd.t_com_min === '' ? null : Number(fd.t_com_min),
-      obs: fd.obs,
-    };
-    // Solo el ADMIN envía horas extra corregidas; para el resto la BD las calcula.
-    if (esAdmin) {
-      nuevaCab.h_ext_manual = form.h_ext_manual.checked;
-      if (nuevaCab.h_ext_manual) nuevaCab.h_ext = Number(form.h_ext.value) || 0;
-    }
-    const nuevasLineas = leerLineas();
-    const msg = main.querySelector('#form-msg');
-    // Se valida con los valores que guardará la BD (los vacíos ya sustituidos).
-    const errores = validarParte(conValoresIniciales(nuevaCab, ini), nuevasLineas, cat);
-    const sinTareas = errorSinTareas(p?.estado, nuevasLineas, cat);
-    if (sinTareas) errores.push(`${sinTareas}.`);
-    // Un parte ya cerrado no puede quedar con tareas sin responder (014). En Pendiente se permite.
-    const sinResponder = p && p.estado !== 'Pendiente'
-      ? errorFinVuelta(nuevasLineas, cat, `El parte está ${p.estado}: indica si termina la vuelta en`) : null;
-    if (sinResponder) errores.push(`${sinResponder}.`);
-    if (errores.length) {
-      msg.innerHTML = `<div class="state state-error" role="alert"><strong>Revisa el formulario:</strong><ul>${errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
-      msg.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
-    const btn = main.querySelector('#guardar');
-    btn.disabled = true; btn.textContent = 'Guardando…'; msg.innerHTML = '';
+  async function aceptar(fs, idLinea) {
+    const l = leerEditor(fs, idLinea);
+    const msg = fs.querySelector('#ed-msg');
+    // Mismas comprobaciones que guardar_linea() (019), con la jornada ya guardada.
+    const errores = validarLinea(p, l, lineas, cat);
+    if (errores.length) { msg.innerHTML = listaErrores(errores); return; }
+    const b = fs.querySelector('#b-aceptar');
+    b.disabled = true; b.textContent = 'Guardando…'; msg.innerHTML = '';
     try {
-      const nuevoId = await st.api.saveParte({ id_parte: id, cab: nuevaCab, lineas: nuevasLineas });
-      toast(id ? 'Cambios guardados.' : 'Parte creado. Queda pendiente de revisión.');
-      location.hash = `#/partes/${nuevoId}`;
+      await st.api.guardarLinea(id, l);
+      p = await st.api.getParte(id);
+      lineas = ordenarLineas(p.lineas);
+      cerrarEditor();
+      toast('Línea guardada.');
     } catch (e) {
       msg.innerHTML = errorHtml(e, { retry: false });
-      btn.disabled = false; btn.textContent = id ? 'Guardar cambios' : 'Crear parte';
+      b.disabled = false; b.textContent = 'Aceptar';
+    }
+  }
+
+  main.querySelector('#add-linea').addEventListener('click', () => abrirEditor(propuesta()));
+  main.querySelector('#tabla-lineas').addEventListener('click', async (ev) => {
+    const fila = ev.target.closest('tr[data-id]');
+    if (!fila || ev.target.disabled) return;
+    const l = lineas.find((x) => x.id_linea === fila.dataset.id);
+    if (ev.target.matches('[data-editar]')) abrirEditor(l);
+    if (ev.target.matches('[data-quitar]')) {
+      if (!confirm(`¿Quitar la línea ${l.h_ini}–${l.h_fin} (${etiquetaTarea(l.tarea)})?`)) return;
+      ev.target.disabled = true;
+      try {
+        await st.api.borrarLinea(l.id_linea);
+        p = await st.api.getParte(id);
+        lineas = ordenarLineas(p.lineas);
+        linMsg.innerHTML = '';
+        pintarLineas();
+        toast('Línea quitada.');
+      } catch (e) { linMsg.innerHTML = errorHtml(e, { retry: false }); ev.target.disabled = false; }
     }
   });
+
+  refrescarCab();
+  pintarLineas();
+  mostrarTab(id && tabInicial === 'lineas' ? 'lineas' : 'jornada');
 }
+
+const listaErrores = (errores) =>
+  `<div class="state state-error" role="alert"><strong>Revisa:</strong><ul>${errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
 
 // ---------- Vueltas, exportaciones y archivo (migración 015) ----------
 const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return fechaLocal(d); };

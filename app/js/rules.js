@@ -169,6 +169,61 @@ export const etiquetaTipo = (tipo) => ({
 export const ordenarLineas = (lineas) =>
   [...lineas].sort((a, b) => (aMin(a.h_ini) ?? 1e9) - (aMin(b.h_ini) ?? 1e9) || (aMin(a.h_fin) ?? 1e9) - (aMin(b.h_fin) ?? 1e9));
 
+// Comprobaciones de una línea sola (tarea, horas, 15 minutos, parcela de su finca).
+// completa = tiene lo necesario para comprobarla junto al resto del parte.
+function erroresBasicosLinea(l, cat, prefijo = '') {
+  const errores = [];
+  const msg = (t) => (prefijo ? `${prefijo} ${t}` : t.charAt(0).toUpperCase() + t.slice(1));
+  let completa = true;
+  if (!l.tarea) { errores.push(msg('falta la tarea.')); completa = false; }
+  if (!l.h_ini || !l.h_fin) { errores.push(msg('faltan hora de inicio o fin.')); completa = false; }
+  else if (calcHoras(l.h_ini, l.h_fin) == null) { errores.push(msg('la hora de fin debe ser posterior a la de inicio.')); completa = false; }
+  else if (!esCuartoDeHora(l.h_ini) || !esCuartoDeHora(l.h_fin)) { errores.push(msg('las horas deben ir en intervalos de 15 minutos.')); completa = false; }
+  if (l.parcela) {
+    const p = cat.parcelas.find((x) => x.cod_par === l.parcela);
+    if (p && l.finca && p.finca !== l.finca) errores.push(msg('la parcela no pertenece a la finca elegida.'));
+  }
+  return { errores, completa };
+}
+
+// Orden de las líneas, como guardar_linea() (019): una línea nueva empieza cuando acaba la última o
+// más tarde; una editada sigue entre la anterior y la siguiente. null si está bien.
+export function errorOrdenLinea(lineas, linea) {
+  const ini = aMin(linea.h_ini);
+  const fin = aMin(linea.h_fin);
+  if (!linea.id_linea) {
+    const ult = lineas.reduce((m, l) => (m == null || aMin(l.h_fin) > aMin(m) ? l.h_fin : m), null);
+    return ult != null && ini < aMin(ult)
+      ? `La tarea nueva debe empezar a las ${hhmm(ult)} o más tarde, cuando acaba la última tarea del parte` : null;
+  }
+  const vieja = lineas.find((l) => l.id_linea === linea.id_linea);
+  if (!vieja) return 'La línea no pertenece a este parte';
+  const otras = lineas.filter((l) => l.id_linea !== linea.id_linea);
+  const antes = otras.filter((l) => aMin(l.h_ini) < aMin(vieja.h_ini)).map((l) => l.h_fin);
+  const despues = otras.filter((l) => aMin(l.h_ini) > aMin(vieja.h_ini)).map((l) => l.h_ini);
+  const prevFin = antes.reduce((m, h) => (m == null || aMin(h) > aMin(m) ? h : m), null);
+  const sigIni = despues.reduce((m, h) => (m == null || aMin(h) < aMin(m) ? h : m), null);
+  if (prevFin != null && ini < aMin(prevFin)) {
+    return `La tarea debe empezar a las ${hhmm(prevFin)} o más tarde, cuando acaba la tarea anterior`;
+  }
+  if (sigIni != null && fin > aMin(sigIni)) {
+    return `La tarea debe terminar a las ${hhmm(sigIni)} o antes, cuando empieza la tarea siguiente`;
+  }
+  return null;
+}
+
+// Validación al pulsar "Aceptar" en una línea, como guardar_linea() (019): la línea sola, su orden y
+// después el parte completo con la línea puesta (jornada, cadena de desplazamientos, campos por tipo).
+// cab: la jornada ya guardada; lineas: las líneas ya aceptadas. Devuelve la lista de errores.
+export function validarLinea(cab, linea, lineas, cat) {
+  const basicos = erroresBasicosLinea(linea, cat);
+  if (basicos.errores.length) return basicos.errores;
+  const orden = errorOrdenLinea(lineas, linea);
+  if (orden) return [`${orden}.`];
+  const todas = linea.id_linea ? lineas.map((l) => (l.id_linea === linea.id_linea ? linea : l)) : [...lineas, linea];
+  return validarParte(cab, todas, cat);
+}
+
 export function validarParte(cab, lineas, cat) {
   const e = [];
   if (!cab.operario) e.push('Falta el operario.');
@@ -188,17 +243,9 @@ export function validarParte(cab, lineas, cat) {
   // Comprobaciones de cada línea por separado
   const completas = [];
   lineas.forEach((l, i) => {
-    const n = `Línea ${i + 1}:`;
-    let ok = true;
-    if (!l.tarea) { e.push(`${n} falta la tarea.`); ok = false; }
-    if (!l.h_ini || !l.h_fin) { e.push(`${n} faltan hora de inicio o fin.`); ok = false; }
-    else if (calcHoras(l.h_ini, l.h_fin) == null) { e.push(`${n} la hora de fin debe ser posterior a la de inicio.`); ok = false; }
-    else if (!esCuartoDeHora(l.h_ini) || !esCuartoDeHora(l.h_fin)) { e.push(`${n} las horas deben ir en intervalos de 15 minutos.`); ok = false; }
-    if (l.parcela) {
-      const p = cat.parcelas.find((x) => x.cod_par === l.parcela);
-      if (p && l.finca && p.finca !== l.finca) e.push(`${n} la parcela no pertenece a la finca elegida.`);
-    }
-    if (ok) completas.push(l);
+    const el = erroresBasicosLinea(l, cat, `Línea ${i + 1}:`);
+    e.push(...el.errores);
+    if (el.completa) completas.push(l);
   });
   if (completas.length !== lineas.length) return e;  // primero corregir lo básico
 

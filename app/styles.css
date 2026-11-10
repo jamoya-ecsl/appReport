@@ -45,6 +45,15 @@ input[type=checkbox] { width: auto; }
 .wide { grid-column: 1 / -1; }
 .linea { border: 1px dashed var(--border); border-radius: 8px; padding: .8rem; margin: 0 0 .8rem; align-items: end; }
 .total { margin: .8rem 0 0; font-size: 1.05rem; }
+/* Pestañas del formulario del parte (Jornada · Líneas del parte) */
+.tabs { display: flex; gap: .2rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin: 0 0 1rem; }
+.tabs button { background: none; color: var(--text); border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: .6rem 1rem; }
+.tabs button.active { border-bottom-color: var(--primary); color: var(--primary); font-weight: 600; }
+.tabs button:disabled { cursor: not-allowed; }
+.linea.editor { border: 2px solid var(--primary); background: #fafcf9; }
+.linea legend { font-weight: 600; color: var(--text); padding: 0 .3rem; }
+tr.editando { background: var(--ok-bg); }
+td.acciones { display: flex; gap: .8rem; }
 .sticky-actions { position: sticky; bottom: 0; padding: .7rem 0; background: var(--bg); }
 .filters { display: flex; gap: .8rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
 .filters label { min-width: 140px; }
