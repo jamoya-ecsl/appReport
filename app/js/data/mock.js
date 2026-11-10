@@ -5,10 +5,11 @@
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
   normalizarFinVuelta, errorFinVuelta, errorFechaArchivada, filasResumen, calcVueltas,
+  puedeGenerarPdf,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
-const KEY = 'pt-demo-v7';  // v7: archivo de tareas y vueltas (migración 015)
+const KEY = 'pt-demo-v8';  // v8: PDF del parte (migración 016)
 const params = new URLSearchParams(location.search);
 const FALLO = params.has('fallo');           // ?demo&fallo → simula un error de red al cargar partes
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -101,7 +102,8 @@ function semilla() {
   // Como la tabla configuracion (011 y 012).
   const config = { th_jornada: 8.5, cfh_ent: '07:30', cfh_sal: '18:00', cft_alm: 30, cft_com: 90, cfc_inicio: '09-01' };
   // Como archivos_partes y tareas_realizadas (015): vacías al empezar.
-  return { partes, lineas, seq: 4, cod: null, config, archivos: [], archivo: [] };
+  // Como partes_pdf (016): vacía al empezar. En el modo demo el "PDF" es una página para imprimir.
+  return { partes, lineas, seq: 4, cod: null, config: { ...config, cfp_carpeta: 'partes' }, archivos: [], archivo: [], pdfs: [] };
 }
 
 function cargar() {
@@ -130,6 +132,13 @@ export function createMockApi(reason) {
   const dma = (d) => d.split('-').reverse().join('/');
   // Como la vista tareas_resumen: archivo + partes Aprobados sin archivar.
   const tareasResumen = () => db.archivo.concat(filasResumen(db.partes, db.lineas, CATALOGOS, db.config.cfc_inicio));
+  // Foto del parte para el PDF, como pdf_datos(): solo contenido, sin fechas de modificación.
+  const fotoParte = (p) => {
+    const { fch_modificacion: _m, fch_creacion: _c, creado_por: _p, id_parte: _i, ...cab } = conHoras(p);
+    return { ...cab, lineas: ordenarLineas(lineasDe(p.id_parte))
+      .map(({ id_linea: _l, id_parte: _ip, ...l }) => ({ ...l, t_horas: calcHoras(l.h_ini, l.h_fin) })) };
+  };
+  const urlDemo = (pdf) => URL.createObjectURL(new Blob([htmlParte(pdf)], { type: 'text/html;charset=utf-8' }));
   const valoresIniciales = () => ({ h_ent: db.config.cfh_ent, h_sal: db.config.cfh_sal,
     t_alm_min: db.config.cft_alm, t_com_min: db.config.cft_com });
 
@@ -305,6 +314,43 @@ export function createMockApi(reason) {
       if (!esGestorActual()) return [];
       return [...db.archivos].sort((a, b) => b.hasta.localeCompare(a.hasta));
     },
+    // ---------- PDF del parte: como partes_pdf, pdf_pedir() y la función generar-pdf (016) ----------
+    async listPdfs(idParte) {
+      exigirSesion();
+      await wait(100);
+      return db.pdfs.filter((x) => x.id_parte === idParte && (esGestor(yo()) || x.operario === yo().cod_ope))
+        .sort((a, b) => b.version - a.version)
+        .map(({ datos: _d, ...x }) => x);
+    },
+    async generarPdf(idParte) {
+      exigirSesion();
+      await wait(600);
+      const u = yo();
+      if (!esGestor(u)) throw new Error('Solo un SUPERVISOR o un ADMIN pueden generar el PDF de un parte');
+      const p = db.partes.find((x) => x.id_parte === idParte);
+      if (!p) throw new Error('Parte no encontrado');
+      if (!puedeGenerarPdf(u, p)) throw new Error(`Solo se puede generar el PDF de un parte Aprobado (este está ${p.estado})`);
+      const datos = fotoParte(p);
+      const ult = db.pdfs.filter((x) => x.id_parte === idParte).sort((a, b) => b.version - a.version)[0];
+      if (ult && JSON.stringify(ult.datos) === JSON.stringify(datos)) {
+        return { url: urlDemo(ult), ruta: ult.ruta, version: ult.version, nuevo: false };
+      }
+      const version = (ult?.version || 0) + 1;
+      const ahora = new Date().toISOString();
+      const pdf = { id: db.pdfs.length + 1, id_parte: idParte, num_parte: p.num_parte, operario: p.operario, fecha: p.fecha,
+        version, estado: 'Generado', ruta: `${db.config.cfp_carpeta}/${p.fecha.slice(0, 4)}/${p.num_parte}_v${version}.pdf`,
+        solicitado: ahora, solicitado_por: u.cod_ope, generado: ahora, error: null, datos };
+      db.pdfs.push(pdf);
+      guardar();
+      return { url: urlDemo(pdf), ruta: pdf.ruta, version, nuevo: true };
+    },
+    async urlPdf(ruta) {
+      exigirSesion();
+      const pdf = db.pdfs.find((x) => x.ruta === ruta && (esGestor(yo()) || x.operario === yo().cod_ope));
+      if (!pdf) throw new Error('PDF no encontrado o sin permiso para verlo.');
+      return urlDemo(pdf);
+    },
+
     async archivarPartes(hasta) {
       exigirSesion();
       await wait(500);
@@ -339,4 +385,34 @@ export function createMockApi(reason) {
       return r;
     },
   };
+}
+
+// Página para imprimir que hace de PDF en el modo demo (el PDF real lo dibuja la función generar-pdf).
+function htmlParte(pdf) {
+  const d = pdf.datos;
+  const e = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const nom = (lista, campo, cod, txt) => CATALOGOS[lista].find((x) => x[campo] === cod)?.[txt] || cod || '—';
+  const ope = (cod) => OPERARIOS.find((o) => o.cod_ope === cod)?.usuario || cod || '—';
+  const dma = (f) => (f ? f.slice(0, 10).split('-').reverse().join('/') : '—');
+  const filas = d.lineas.map((l) => `<tr><td>${e(l.h_ini)}</td><td>${e(l.h_fin)}</td><td>${e(l.t_horas)} h</td>
+    <td>${e(nom('tareas', 'cod_tar', l.tarea, 'tareas'))}</td><td>${e(nom('fincas', 'cod_fin', l.finca, 'finca'))}</td>
+    <td>${e(nom('parcelas', 'cod_par', l.parcela, 'nom_parc'))}</td><td>${e(l.vehiculo || '—')}</td><td>${e(l.apero || '—')}</td>
+    <td>${l.fin_vuelta === true ? 'Sí' : l.fin_vuelta === false && l.parcela ? 'No' : '—'}</td></tr>`).join('');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Parte nº ${e(d.num_parte)} · v${pdf.version}</title>
+<style>body{font:13px system-ui,sans-serif;margin:32px;color:#111}h1{font-size:22px;margin:0 0 4px}.m{color:#666}
+table{border-collapse:collapse;width:100%;margin-top:8px}td,th{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left;font-size:12px}
+dl{display:grid;grid-template-columns:repeat(2,max-content 1fr);gap:4px 12px}dt{color:#666}dd{margin:0;font-weight:600}
+.aviso{background:#fff3cd;padding:6px 10px;margin-bottom:16px}@media print{.aviso{display:none}}</style></head><body>
+<div class="aviso">MODO DEMO · datos ficticios. En la app real esto es un PDF generado por el servidor. Usa Imprimir del navegador.</div>
+<h1>Parte de trabajo nº ${e(d.num_parte)}</h1><div class="m">Versión ${pdf.version} · Aprobado</div><hr>
+<dl><dt>Operario</dt><dd>${e(ope(d.operario))}</dd><dt>Fecha</dt><dd>${dma(d.fecha)}</dd>
+<dt>Entrada</dt><dd>${e(d.h_ent)}</dd><dt>Salida</dt><dd>${e(d.h_sal)}</dd>
+<dt>Almuerzo</dt><dd>${e(d.t_alm_min)} min</dd><dt>Comida</dt><dd>${e(d.t_com_min)} min</dd>
+<dt>Total jornada</dt><dd>${e(d.tot_horas)} h</dd><dt>Horas extra</dt><dd>${e(d.h_ext)} h</dd></dl>
+${d.obs ? `<p><span class="m">Observaciones:</span> ${e(d.obs)}</p>` : ''}
+<h2>Tareas realizadas (${d.lineas.length})</h2><table><thead><tr><th>Inicio</th><th>Fin</th><th>Horas</th><th>Tarea</th><th>Finca</th>
+<th>Parcela</th><th>Vehículo</th><th>Apero</th><th>Fin vuelta</th></tr></thead><tbody>${filas}</tbody></table>
+<h2>Cierre y revisión</h2><dl><dt>Cerrado por</dt><dd>${e(ope(d.cerrado_por))}</dd><dt>Aprobado por</dt><dd>${e(ope(d.supervisor_revisa))}</dd></dl>
+<p class="m">Parte nº ${e(d.num_parte)} · versión ${pdf.version} · generado el ${new Date(pdf.generado).toLocaleString('es-ES')} por ${e(pdf.solicitado_por)}</p>
+</body></html>`;
 }

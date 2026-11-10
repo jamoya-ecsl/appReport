@@ -10,7 +10,7 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
 | 5 · Supervisor y auditoría de partes | `013_supervisor_y_auditoria_partes.sql` | Aplicada y verificada 04/11 |
 | 6 · `fin_vuelta` | `014_fin_vuelta.sql` | Aplicada y verificada 04/11 |
 | 7 · Archivo de tareas y vueltas | `015_archivo_tareas_y_vueltas.sql` | Aplicada y verificada 05/11 |
-| 8 · PDF al aprobar | 016 + función del servidor (Edge Function) | Por preparar |
+| 8 · PDF del parte | `016_pdf_partes.sql` + función del servidor `generar-pdf` | Aplicada y verificada 05/11 |
 
 ## 4 · Valores iniciales (012)
 - `configuracion`: `cfh_ent` 07:30, `cfh_sal` 18:00, `cft_alm` 30 min, `cft_com` 90 min.
@@ -41,15 +41,18 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
 - Archivo "hasta una fecha" (solo ADMIN, como mucho hasta ayer): no se puede si queda algún parte Pendiente o Cerrado
   en el rango. Los Aprobados pasan al archivo y se borran sin copia individual en la auditoría (queda una anotación del
   archivado); **los Rechazados se borran sin archivar**, con su copia completa en la auditoría (decidido 05/11).
-  Después nadie puede crear ni editar partes en esas fechas. La comprobación de que tienen PDF se añade en la 016.
+  Después nadie puede crear ni editar partes en esas fechas. (Archivar no exige PDF: ver módulo 8.)
 - La vista de vueltas (finca, parcela, tarea, operario que marca el fin, fecha de fin) incluye el archivo y los
   Aprobados aún sin archivar. El "archivo de vueltas" del supervisor es una exportación de esa vista.
 - **Horas por trabajador**: solo exportación CSV (parte, operario, fecha, entrada, salida, almuerzo, comida)
   **antes de archivar**, sin tabla propia (respuesta 12). Al borrar los partes esos datos dejan de estar en la BD.
 
-## 8 · PDF al aprobar (016)
-- Se genera automáticamente al aprobar y se guarda en almacenamiento privado de Supabase (Storage).
-- Lo ven el ADMIN, el supervisor y el operario titular; si el ADMIN corrige el parte, se genera uno nuevo y se
-  conserva el anterior.
-- Pendiente: la "ruta de guardado" configurable. Dentro de Supabase sí (carpeta configurable en `configuracion`);
-  una carpeta de un ordenador o servidor de la oficina no, porque Supabase no puede escribir ahí.
+## 8 · PDF del parte (016)
+- **Cambio del 05/11: no se genera automáticamente.** Botón "Generar PDF" (imprimir) a petición, solo para el
+  SUPERVISOR y el ADMIN y solo en partes **Aprobados**.
+- Lo ven el ADMIN, el supervisor y el operario titular. Si el parte no ha cambiado desde el último PDF, el botón
+  devuelve ese; si el ADMIN lo corrigió, se genera una versión nueva y se conserva la anterior.
+- Se guarda en almacenamiento privado de Supabase (bucket `partes-pdf`), en la carpeta `cfp_carpeta` de la configuración
+  (por defecto `partes`). Una carpeta de un ordenador o servidor de la oficina no es posible: Supabase no puede escribir ahí.
+- **Archivar no exige el PDF** (decidido 05/11). De los partes archivados sin PDF solo quedan el resumen de tareas y el
+  CSV de horas si se exportó. Los PDF existentes se conservan al archivar o borrar el parte.

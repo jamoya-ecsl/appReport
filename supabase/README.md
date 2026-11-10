@@ -25,6 +25,7 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `013_supervisor_y_auditoria_partes.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 18/18 con `pruebas/pruebas_modulo5.sql` | Módulo 5: el SUPERVISOR crea partes para cualquier operario activo y corrige los Pendientes y Cerrados; titular activo obligatorio; un parte no Pendiente sin nave conserva al menos una tarea; auditoría de `partes_cab` y `partes_det` (registro = nº de parte); `borrar_parte()` deja la copia por disparador |
 | `014_fin_vuelta.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 10/10 con `pruebas/pruebas_modulo6.sql` | Módulo 6: `partes_det.fin_vuelta` (Sí/No/sin responder) en tareas con parcela y tipo POR SUPERFICIE o POR HORAS (en el resto, No); obligatoria al cerrar y en partes ya cerrados; `requiere_fin_vuelta(partes_det)` para la app |
 | `015_archivo_tareas_y_vueltas.sql` | Aplicada 05/11 desde el SQL Editor (no figura en el historial); verificada 15/15 con `pruebas/pruebas_modulo7.sql` | Módulo 7: campaña agrícola (`cfc_inicio` = 09-01, `campana_de()`); `archivar_partes(hasta)` (solo ADMIN): exige que no quede ningún parte Pendiente o Cerrado en el rango, pasa las tareas de los Aprobados a `tareas_realizadas` (sin MOTIVOS PERSONALES ni DESPLAZAMIENTO, agrupadas) y borra los partes; los Rechazados se borran sin archivar con su copia en la auditoría; registro en `archivos_partes`; no se crean ni modifican partes en fechas archivadas; vistas `tareas_resumen`, `vueltas` y `horas_trabajador` (solo ADMIN y SUPERVISOR) |
+| `016_pdf_partes.sql` + `functions/generar-pdf` | Aplicada 05/11 desde el SQL Editor (no figura en el historial); verificada 15/15 con `pruebas/pruebas_modulo8.sql`. Función `generar-pdf` desplegada 05/11 (verify_jwt activado) | Módulo 8: PDF del parte **a petición** (botón), solo de partes Aprobados y solo SUPERVISOR y ADMIN; lo ven también el operario titular; versión nueva solo si el parte cambió; bucket privado `partes-pdf`, carpeta configurable `cfp_carpeta`; tabla `partes_pdf`; `pdf_pedir()` y `pdf_marcar()`; archivar no exige PDF y los PDF se conservan |
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
@@ -98,6 +99,15 @@ Reglas que impone la BD (no solo la interfaz):
     Hasta ayer como mucho y posterior al último archivado (`from('archivos_partes')`, el de mayor `hasta`).
     No se puede deshacer: pedir confirmación y recordar la exportación de horas.
   - Campaña de una fecha: `rpc('campana_de', { p_fecha })` → `'2026/27'`. El inicio (`cfc_inicio`, MM-DD) está en `configuracion`.
+- **PDF del parte** (016):
+  - Botón "Generar PDF" (SUPERVISOR y ADMIN, parte Aprobado):
+    `supabase.functions.invoke('generar-pdf', { body: { id_parte } })` → `{ url, ruta, version, nuevo }`.
+    `url` es un enlace de 5 minutos: abrirlo en una pestaña nueva para ver o imprimir. `nuevo = false` si el parte no ha
+    cambiado desde el último PDF (se devuelve ese). Errores: 403 sin permiso, 400 regla de negocio (mensaje en `error`).
+  - Versiones de un parte (ADMIN, SUPERVISOR y el operario titular):
+    `from('partes_pdf').select('id, version, estado, ruta, generado, solicitado_por, error').eq('id_parte', id)`.
+    Para abrir una ya generada: `storage.from('partes-pdf').createSignedUrl(ruta, 300)`.
+  - Carpeta: `configuracion.cfp_carpeta` (ADMIN). Solo afecta a los PDF nuevos.
 - **Valores iniciales del formulario** (012): `rpc('valores_iniciales_parte')` → `{h_ent, h_sal, t_alm_min, t_com_min}`,
   para cualquier rol. La tabla `configuracion` (incluidos estos valores y `th_jornada`) solo la lee y modifica el ADMIN:
   `update configuracion set valor = '08:00' where clave = 'cfh_ent'`.
@@ -147,7 +157,10 @@ Para la 015: `pruebas_modulo7.sql` (15 casos, nuevo; usa partes del año 2000 y 
 No contiene `DELETE`, así que también se puede ejecutar desde Claude Code. Los demás scripts no cambian.
 Resultados con la 015 aplicada (05/11): módulo 7 15/15, por rol 32/32, módulo 1 32/32, módulo 3 21/21 y módulo 5 18/18 (SQL Editor);
 módulos 6 10/10, 4 18/18 y 2 32/32 (Claude Code).
-En `pruebas_modulo4.sql`, V04 espera desde la 015 también la clave `cfc_inicio=09-01`. El módulo 3 tiene 21 casos: los "19/19" anteriores eran un error de recuento (H09b, H11 y T01 se añadieron después).
+En `pruebas_modulo4.sql`, V04 espera desde la 015 también la clave `cfc_inicio=09-01` (y desde la 016, `cfp_carpeta=partes`).
+Para la 016: `pruebas_modulo8.sql` (15 casos, nuevo; sin DELETE, se puede ejecutar desde Claude Code). Imita a la función
+del servidor llamando a `pdf_marcar()`; el PDF real se comprueba pulsando el botón en la app.
+Resultados con la 016 aplicada (05/11): módulo 8 15/15 (SQL Editor), módulo 4 18/18 y módulo 7 15/15 (Claude Code). El módulo 3 tiene 21 casos: los "19/19" anteriores eran un error de recuento (H09b, H11 y T01 se añadieron después).
 Cuando se archiven partes reales, `pruebas_modulo7.sql` dejará de pasar (sus fechas del año 2000 quedarán archivadas).
 Resultados con la 014 aplicada (04/11): módulo 6 10/10, por rol 32/32, módulo 1 32/32, módulo 2 32/32, módulo 3 19/19, módulo 4 18/18 y módulo 5 18/18.
 (Los módulos 2 y 4 se ejecutaron desde Claude Code; el conector rechaza los scripts que contienen DELETE, por eso

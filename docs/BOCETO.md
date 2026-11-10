@@ -33,6 +33,7 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, cierre y revisión. Cerrar (si está Pendiente), Aprobar/Rechazar (gestor, si está Cerrado), Borrar (ADMIN) |
 | Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
 | Editar | `#/partes/:id/editar` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Mismo formulario |
+| Detalle · PDF | `#/partes/:id` | Botón: SUPERVISOR y ADMIN (partes Aprobados). Lista: también el operario titular | "Generar PDF" abre el PDF (nuevo si el parte cambió, si no el último) y lista sus versiones con "Abrir". En el modo demo el PDF es una página para imprimir |
 | Vueltas y archivo | `#/archivo` | ADMIN y SUPERVISOR | Vueltas por parcela y tarea (filtros campaña y estado, CSV); CSV de horas por trabajador y de tareas realizadas por fechas; archivar hasta una fecha (solo ADMIN) e historial de archivados |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
@@ -65,6 +66,9 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
     borran; los Rechazados se borran sin archivar. Después no se pueden crear ni modificar partes de esas fechas.
   - Las horas por trabajador se exportan antes de archivar: después ya no están.
   - Los CSV usan `;` y coma decimal para abrirlos en Excel en español.
+- PDF (migración 016): no se genera solo. El SUPERVISOR o el ADMIN pulsan "Generar PDF" en un parte Aprobado; si el parte
+  no ha cambiado desde el último PDF se abre ese, y si el ADMIN lo corrigió se crea una versión nueva y se conservan las
+  anteriores. Archivar no exige PDF; los PDF se conservan al archivar.
 - Un parte por operario y día. Salida > entrada. Rechazar exige comentario.
 - `tot_horas` = (salida − entrada) − almuerzo − comida.
 
@@ -79,7 +83,7 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 
 ## Fuera de alcance (existe en el diseño, no en el boceto)
 Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admin), pantalla de configuración, "Mi perfil", fotos y GPS,
-notificaciones y PDF (módulo 8, migración 016).
+notificaciones. El PDF real lo dibuja la función del servidor `generar-pdf` (en el modo demo se muestra una página para imprimir).
 
 ## Archivos del boceto
 | Archivo | Función |
@@ -94,7 +98,7 @@ notificaciones y PDF (módulo 8, migración 016).
 | `scripts/serve.mjs` | Servidor local sin dependencias; no envía nunca claves secretas al navegador |
 
 ## Qué llevar a Lovable
-- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`, `listVueltas`, `listTareasResumen`, `listHorasTrabajador`, `listArchivos`, `archivarPartes`) y los mensajes de error de `supabase.js`.
+- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`, `listVueltas`, `listTareasResumen`, `listHorasTrabajador`, `listArchivos`, `archivarPartes`, `listPdfs`, `generarPdf`, `urlPdf`) y los mensajes de error de `supabase.js`.
 - **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
 - **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.

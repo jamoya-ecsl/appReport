@@ -301,3 +301,7 @@ export function aCsv(filas, columnas) {
   return `﻿${[columnas.map(([, t]) => t).join(';'),
     ...filas.map((f) => columnas.map(([k]) => celda(f[k])).join(';'))].join('\r\n')}\r\n`;
 }
+
+// ---------- PDF del parte (migración 016) ----------
+// Solo SUPERVISOR y ADMIN, y solo de partes Aprobados (como pdf_pedir() de la BD).
+export const puedeGenerarPdf = (u, p) => esGestor(u) && p.estado === 'Aprobado';

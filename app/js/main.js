@@ -8,7 +8,7 @@ import {
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
   VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
-  requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv,
+  requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv, puedeGenerarPdf,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -303,8 +303,12 @@ async function viewDetalle(id) {
       </form>` : ''}
     ${esGestor(u) && p.estado === 'Pendiente' ? '<p class="muted">Para aprobar o rechazar, el parte tiene que estar cerrado.</p>' : ''}
     ${u.rol_app === 'SUPERVISOR' && p.estado === 'Cerrado' && p.operario === u.cod_ope ? '<p class="muted">Tus propios partes los revisa un ADMIN.</p>' : ''}
-    </section>`;
+    </section>
+    ${p.estado === 'Aprobado' ? `<section class="card" id="pdf-card"><div class="page-head"><h2>PDF del parte</h2>
+        ${puedeGenerarPdf(u, p) ? '<button type="button" id="b-pdf">Generar PDF</button>' : ''}</div>
+      <div id="pdf-msg"></div><div id="pdf-lista">${loadingHtml('Cargando PDF…')}</div></section>` : ''}`;
 
+  if (p.estado === 'Aprobado') pintarPdfs(main, p);
   const accMsg = main.querySelector('#acc-msg');
   main.querySelector('#b-cerrar')?.addEventListener('click', async (ev) => {
     const err = errorCierre(p, p.lineas.length) || errorFinVuelta(p.lineas, st.cat);
@@ -698,4 +702,45 @@ async function viewArchivo(q) {
       boton.disabled = false;
     }
   });
+}
+
+// ---------- PDF del parte (migración 016) ----------
+// El botón lo ven SUPERVISOR y ADMIN; la lista de versiones, también el operario titular.
+async function pintarPdfs(main, p) {
+  const lista = main.querySelector('#pdf-lista');
+  const msg = main.querySelector('#pdf-msg');
+  const cargar = async () => {
+    try {
+      const pdfs = await st.api.listPdfs(p.id_parte);
+      lista.innerHTML = pdfs.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Versión</th><th>Estado</th><th>Generado</th><th>Por</th><th></th></tr></thead>
+        <tbody>${pdfs.map((x) => `<tr><td>v${esc(x.version)}${x === pdfs[0] ? ' <span class="muted">(última)</span>' : ''}</td>
+          <td>${esc(x.estado)}${x.error ? `<br><span class="muted">${esc(x.error)}</span>` : ''}</td>
+          <td>${fmtFechaHora(x.generado)}</td><td>${esc(nombreOperario(x.solicitado_por))}</td>
+          <td>${x.estado === 'Generado' ? `<button type="button" class="link" data-ruta="${esc(x.ruta)}">Abrir</button>` : ''}</td></tr>`).join('')}
+        </tbody></table></div>`
+        : `<p class="muted">Aún no se ha generado el PDF de este parte.${esGestor(st.user) ? '' : ' Lo genera el supervisor o el administrador.'}</p>`;
+      lista.querySelectorAll('[data-ruta]').forEach((b) => b.addEventListener('click', async () => {
+        const w = window.open('', '_blank');   // se abre ya, para que el navegador no la bloquee
+        try { const url = await st.api.urlPdf(b.dataset.ruta); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message, 'error'); }
+      }));
+    } catch (e) { lista.innerHTML = errorHtml(e, { retry: false }); }
+  };
+  main.querySelector('#b-pdf')?.addEventListener('click', async (ev) => {
+    const b = ev.currentTarget;
+    const w = window.open('', '_blank');
+    b.disabled = true;
+    msg.innerHTML = loadingHtml('Generando PDF…');
+    try {
+      const r = await st.api.generarPdf(p.id_parte);
+      msg.innerHTML = '';
+      toast(r.nuevo ? `PDF generado (versión ${r.version}).` : `El parte no ha cambiado: se abre la versión ${r.version}.`);
+      if (w) w.location = r.url; else location.href = r.url;
+      cargar();
+    } catch (e) {
+      w?.close();
+      msg.innerHTML = errorHtml(e, { retry: false });
+    } finally { b.disabled = false; }
+  });
+  cargar();
 }

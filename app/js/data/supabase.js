@@ -202,5 +202,35 @@ export function createSupabaseApi(cfg) {
     async archivarPartes(hasta) {
       return ok(await sb.rpc('archivar_partes', { p_hasta: hasta }));
     },
+
+    // ---------- PDF del parte (migración 016) ----------
+    // Versiones del PDF de un parte (las ven ADMIN, SUPERVISOR y el operario titular).
+    async listPdfs(idParte) {
+      return ok(await sb.from('partes_pdf')
+        .select('id, version, estado, ruta, solicitado, solicitado_por, generado, error')
+        .eq('id_parte', idParte).order('version', { ascending: false }));
+    },
+    // Botón "Generar PDF" (SUPERVISOR y ADMIN, partes Aprobados): la función del servidor generar-pdf
+    // devuelve el último PDF si el parte no ha cambiado, o genera una versión nueva.
+    // → { url (enlace de 5 minutos), ruta, version, nuevo }
+    async generarPdf(idParte) {
+      const { data, error } = await sb.functions.invoke('generar-pdf', { body: { id_parte: idParte } });
+      if (error) {
+        let msg = error.message;
+        try { msg = (await error.context.json()).error || msg; } catch { /* respuesta sin JSON */ }
+        if (/Failed to send|not found|404/i.test(msg)) {
+          throw Object.assign(new Error('La función del servidor generar-pdf no responde.'), {
+            hint: 'Comprueba que está desplegada en Supabase (Edge Functions).',
+          });
+        }
+        throw new Error(msg);
+      }
+      return data;
+    },
+    // Enlace de 5 minutos para abrir una versión ya generada.
+    async urlPdf(ruta) {
+      const r = ok(await sb.storage.from('partes-pdf').createSignedUrl(ruta, 300));
+      return r.signedUrl;
+    },
   };
 }
