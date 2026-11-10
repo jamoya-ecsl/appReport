@@ -47,6 +47,9 @@ Deno.serve(async (req) => {
   if (!auth) return json({ error: 'Falta la sesión' }, 401);
   const { id_parte } = await req.json().catch(() => ({}));
   if (!id_parte) return json({ error: 'Falta id_parte' }, 400);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id_parte))) {
+    return json({ error: 'El identificador del parte no es válido' }, 400);
+  }
 
   // Con la sesión del usuario: los permisos los decide la base de datos.
   const usuario = createClient(URL_SB, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -84,8 +87,14 @@ const LINEA = rgb(0.8, 0.8, 0.8);
 
 // Las fuentes estándar solo admiten caracteres de Europa occidental (WinAnsi): el resto se cambia por '?'.
 const WIN = new Set([...'€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ']);
+// Los caracteres de control (0x00–0x1F, 0x7F y 0x80–0x9F) no se pueden escribir con WinAnsi: pdf-lib fallaría y el
+// PDF no se generaría. Saltos de línea y tabuladores pasan antes a espacio; el resto, a '?'.
+const admitido = (c: string) => {
+  const n = c.charCodeAt(0);
+  return (n >= 0x20 && n < 0x7f) || (n >= 0xa0 && n < 0x100) || WIN.has(c);
+};
 const limpio = (s: unknown) =>
-  [...String(s ?? '')].map((c) => (c.charCodeAt(0) < 256 || WIN.has(c) ? c : '?')).join('').replace(/[\r\n\t]+/g, ' ');
+  [...String(s ?? '').replace(/[\r\n\t]+/g, ' ')].map((c) => (admitido(c) ? c : '?')).join('');
 
 const dma = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('/') : '—');
 const dmaHora = (ts: string | null) => {

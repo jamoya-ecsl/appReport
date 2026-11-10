@@ -2,3 +2,6 @@ node_modules/
 .env
 .env.*
 !.env.example
+
+# Configuración local de Claude Code (cada persona la suya)
+.claude/settings.local.json

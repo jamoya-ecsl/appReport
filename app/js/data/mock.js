@@ -376,6 +376,15 @@ export function createMockApi(reason) {
       guardar();
       return { url: urlDemo(pdf), ruta: pdf.ruta, version, nuevo: true };
     },
+    // Como listPdfsGenerados de supabase.js: última versión generada de cada parte, aunque esté archivado.
+    async listPdfsGenerados(f = {}) {
+      exigirSesion();
+      await wait();
+      const lista = filtrarFechas(db.pdfs.filter((x) => x.estado === 'Generado' && (esGestor(yo()) || x.operario === yo().cod_ope)), 'fecha', f)
+        .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.num_parte - a.num_parte || b.version - a.version);
+      const vistos = new Set();
+      return lista.filter((x) => !vistos.has(x.id_parte) && vistos.add(x.id_parte));
+    },
     async urlPdf(ruta) {
       exigirSesion();
       const pdf = db.pdfs.find((x) => x.ruta === ruta && (esGestor(yo()) || x.operario === yo().cod_ope));

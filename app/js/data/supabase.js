@@ -270,6 +270,19 @@ export function createSupabaseApi(cfg) {
       }
       return data;
     },
+    // Última versión generada de cada parte, por fecha del parte (también de partes ya archivados o borrados).
+    async listPdfsGenerados(f = {}) {
+      const filas = await todas(() => {
+        let q = sb.from('partes_pdf').select('id_parte, num_parte, fecha, operario, version, ruta, generado')
+          .eq('estado', 'Generado').order('fecha', { ascending: false }).order('num_parte', { ascending: false })
+          .order('version', { ascending: false });
+        if (f.desde) q = q.gte('fecha', f.desde);
+        if (f.hasta) q = q.lte('fecha', f.hasta);
+        return q;
+      });
+      const vistos = new Set();
+      return filas.filter((x) => !vistos.has(x.id_parte) && vistos.add(x.id_parte));
+    },
     // Enlace de 5 minutos para abrir una versión ya generada.
     async urlPdf(ruta) {
       const r = ok(await sb.storage.from('partes-pdf').createSignedUrl(ruta, 300));

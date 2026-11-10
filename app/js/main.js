@@ -704,6 +704,8 @@ const listaErrores = (errores) =>
 
 // ---------- Vueltas, exportaciones y archivo (migración 015) ----------
 const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return fechaLocal(d); };
+// Lo ya archivado hasta una fecha no se puede volver a archivar: el mínimo es el día siguiente.
+const diaSiguiente = (f) => { const d = new Date(`${f}T00:00:00`); d.setDate(d.getDate() + 1); return fechaLocal(d); };
 
 function descargarCsv(nombre, filas, columnas) {
   const url = URL.createObjectURL(new Blob([aCsv(filas, columnas)], { type: 'text/csv;charset=utf-8' }));
@@ -784,7 +786,7 @@ async function viewArchivo(q) {
       ${admin ? `<p class="muted">Pasa al archivo las tareas de los partes Aprobados hasta la fecha elegida y borra esos partes.
           Los Rechazados se borran sin archivar (queda su copia en la auditoría). No se puede archivar si queda algún parte Pendiente o Cerrado.</p>
         <form id="f-archivar" class="filters">
-          <label>Archivar hasta <input type="date" name="hasta" required max="${ayer()}" ${ult ? `min="${ult}"` : ''}></label>
+          <label>Archivar hasta <input type="date" name="hasta" required max="${ayer()}" ${ult ? `min="${diaSiguiente(ult)}"` : ''}></label>
           <button type="submit" class="danger">Archivar</button>
         </form>
         <div id="archivar-msg"></div>` : '<p class="muted">Solo un ADMIN puede archivar.</p>'}
@@ -793,7 +795,41 @@ async function viewArchivo(q) {
         <tbody>${archivos.map((a) => `<tr><td>${fmtFecha(a.hasta)}</td><td>${fmtFechaHora(a.fecha)}</td><td>${esc(nombreOperario(a.archivado_por))}</td>
           <td>${esc(a.partes)}</td><td>${esc(a.lineas)}</td><td>${esc(a.filas)}</td><td>${esc(a.rechazados)}</td></tr>`).join('')}
         </tbody></table></div>` : ''}
+    </section>
+
+    <section class="card"><h2>PDF de partes</h2>
+      <p class="muted">Todos los PDF generados, también los de partes ya archivados (el parte se borra al archivar, su PDF no).
+        Se muestra la última versión de cada parte.</p>
+      <form id="f-pdfs" class="filters">
+        <label>Desde <input type="date" name="desde"></label>
+        <label>Hasta <input type="date" name="hasta"></label>
+        <button type="submit" class="secondary">Buscar</button>
+      </form>
+      <div id="pdfs-res"></div>
     </section>`;
+
+  // PDF de partes (016): la lista sale de partes_pdf, que se conserva aunque el parte se archive o se borre.
+  const pdfsRes = main.querySelector('#pdfs-res');
+  main.querySelector('#f-pdfs').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f = Object.fromEntries(new FormData(ev.currentTarget));
+    pdfsRes.innerHTML = loadingHtml('Buscando PDF…');
+    try {
+      const pdfs = await st.api.listPdfsGenerados(f);
+      pdfsRes.innerHTML = pdfs.length ? `<p class="muted">${pdfs.length} parte(s) con PDF</p><div class="table-wrap"><table>
+        <thead><tr><th>Nº parte</th><th>Fecha</th><th>Operario</th><th>Versión</th><th>Generado</th><th></th></tr></thead>
+        <tbody>${pdfs.map((x) => `<tr><td>${esc(x.num_parte)}</td><td>${fmtFecha(x.fecha)}</td><td>${esc(nombreOperario(x.operario))}</td>
+          <td>v${esc(x.version)}</td><td>${fmtFechaHora(x.generado)}</td>
+          <td><button type="button" class="link" data-ruta="${esc(x.ruta)}">Abrir</button></td></tr>`).join('')}
+        </tbody></table></div>` : emptyHtml('No hay PDF generados en esas fechas.');
+    } catch (e) { pdfsRes.innerHTML = errorHtml(e, { retry: false }); }
+  });
+  pdfsRes.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-ruta]');
+    if (!b) return;
+    const w = window.open('', '_blank');   // se abre ya, para que el navegador no la bloquee
+    try { const url = await st.api.urlPdf(b.dataset.ruta); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message, 'error'); }
+  });
 
   main.querySelector('#f-vueltas').addEventListener('change', (ev) => {
     const data = Object.fromEntries([...new FormData(ev.currentTarget)].filter(([, v]) => v));

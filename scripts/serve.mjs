@@ -40,8 +40,11 @@ http.createServer(async (req, res) => {
     if (p === '/') p = '/index.html';
     const file = path.resolve(ROOT, `.${p}`);
     if (!file.startsWith(path.resolve(ROOT) + path.sep)) return send(403, 'Prohibido');
+    // Solo se sirven los archivos de la app (html, js, css). Cualquier otro archivo de app/ (por ejemplo un Excel
+    // con datos) no se entrega aunque esté en la carpeta.
+    if (!TYPES[path.extname(file)]) return send(404, 'No encontrado');
     const body = await readFile(file);
-    return send(200, body, TYPES[path.extname(file)] || 'application/octet-stream');
+    return send(200, body, TYPES[path.extname(file)]);
   } catch {
     return send(404, 'No encontrado');
   }

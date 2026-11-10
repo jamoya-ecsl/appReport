@@ -374,8 +374,11 @@ export function calcVueltas(filas, cat) {
 export function aCsv(filas, columnas) {
   const celda = (v) => {
     if (v == null) return '';
-    const s = typeof v === 'number' ? String(v).replace('.', ',') : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : String(v);
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = typeof v === 'number' ? String(v).replace('.', ',') : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : String(v);
+    // Un texto que empieza por = + - @ (o tabulador / retorno) Excel lo ejecutaría como fórmula: se antepone ' para
+    // que se lea como texto. Los números no pasan por aquí, así que una cifra negativa se mantiene.
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return `﻿${[columnas.map(([, t]) => t).join(';'),
     ...filas.map((f) => columnas.map(([k]) => celda(f[k])).join(';'))].join('\r\n')}\r\n`;

@@ -34,7 +34,7 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Nuevo | `#/partes/nuevo` | Todos | Pestaña **Jornada**: cabecera y resumen. "Aceptar jornada" crea el parte y abre **Líneas del parte** |
 | Editar | `#/partes/:id/editar[?tab=lineas]` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Dos pestañas (migración 019): **Jornada** (cabecera y resumen: total, horas de tareas, de mantenimiento y personales, sin asignar, líneas, horas extra) y **Líneas del parte** (tareas y mantenimientos juntos, en orden de hora). Cada línea se comprueba y se guarda al pulsar "Aceptar"; una sola abierta a la vez; aviso al salir con una línea sin aceptar. En el detalle: "Editar jornada" y "Editar líneas" |
 | Detalle · PDF | `#/partes/:id` | Botón: SUPERVISOR y ADMIN (partes Aprobados). Lista: también el operario titular | "Generar PDF" abre el PDF (nuevo si el parte cambió, si no el último) y lista sus versiones con "Abrir". En el modo demo el PDF es una página para imprimir |
-| Vueltas y archivo | `#/archivo` | ADMIN y SUPERVISOR | Vueltas por parcela y tarea (filtros campaña y estado, CSV); CSV de horas por trabajador y de tareas realizadas por fechas; archivar hasta una fecha (solo ADMIN) e historial de archivados |
+| Vueltas y archivo | `#/archivo` | ADMIN y SUPERVISOR | Vueltas por parcela y tarea (filtros campaña y estado, CSV); CSV de horas por trabajador y de tareas realizadas por fechas; archivar hasta una fecha (solo ADMIN) e historial de archivados; **PDF de partes**: busca por fechas la última versión de cada PDF y la abre, también de partes ya archivados |
 
 Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso flotante), validación de formulario, sin permiso.
 

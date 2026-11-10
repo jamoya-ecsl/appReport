@@ -6,7 +6,8 @@
   "description": "Boceto app Partes de Trabajo (Escribano Cabañero) sobre Supabase",
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/serve.mjs",
-    "check:supabase": "node --env-file-if-exists=.env scripts/check-supabase.mjs"
+    "check:supabase": "node --env-file-if-exists=.env scripts/check-supabase.mjs",
+    "test": "node --test scripts/test-rules.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0"
