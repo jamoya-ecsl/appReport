@@ -20,9 +20,9 @@ npm run dev          → http://localhost:5180
 
 ## Pantallas y navegación
 ```
-Login ──► Inicio ──► Lista de partes ──► Detalle ──► Editar
-            │            ▲  (filtros)       │
-            └──► Nuevo parte ───────────────┘ (al guardar va al detalle)
+Login ──► Inicio ──► Lista de partes ──► Detalle ──► Editar (pestañas Jornada · Líneas del parte)
+            │            ▲  (filtros)       ▲
+            └──► Nuevo parte (Jornada) ─► Líneas del parte ─┘ ("Terminado: ver el parte")
             └──► Vueltas y archivo (ADMIN y SUPERVISOR)
 ```
 | Pantalla | Ruta | Quién | Qué hace |
@@ -31,8 +31,8 @@ Login ──► Inicio ──► Lista de partes ──► Detalle ──► Edi
 | Inicio | `#/inicio` | Todos | Contadores por estado, aviso de cerrados por revisar (gestor) o de partes sin cerrar y rechazados (operario), últimos 5 partes |
 | Lista | `#/partes` | Todos | "Mis partes" (operario) / "Todos los partes" (supervisor/admin). Filtros: estado, operario, finca, fechas |
 | Detalle | `#/partes/:id` | Todos | Jornada, líneas de tareas, cierre y revisión. Cerrar (si está Pendiente), Aprobar/Rechazar (gestor, si está Cerrado), Borrar (ADMIN) |
-| Nuevo | `#/partes/nuevo` | Todos | Cabecera + líneas de tareas; parcelas filtradas por finca; total de horas en vivo |
-| Editar | `#/partes/:id/editar` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Mismo formulario |
+| Nuevo | `#/partes/nuevo` | Todos | Pestaña **Jornada**: cabecera y resumen. "Aceptar jornada" crea el parte y abre **Líneas del parte** |
+| Editar | `#/partes/:id/editar[?tab=lineas]` | ADMIN; SUPERVISOR (Pendientes y Cerrados); OPERARIO (suyos, en Pendiente) | Dos pestañas (migración 019): **Jornada** (cabecera y resumen: total, horas de tareas, de mantenimiento y personales, sin asignar, líneas, horas extra) y **Líneas del parte** (tareas y mantenimientos juntos, en orden de hora). Cada línea se comprueba y se guarda al pulsar "Aceptar"; una sola abierta a la vez; aviso al salir con una línea sin aceptar. En el detalle: "Editar jornada" y "Editar líneas" |
 | Detalle · PDF | `#/partes/:id` | Botón: SUPERVISOR y ADMIN (partes Aprobados). Lista: también el operario titular | "Generar PDF" abre el PDF (nuevo si el parte cambió, si no el último) y lista sus versiones con "Abrir". En el modo demo el PDF es una página para imprimir |
 | Vueltas y archivo | `#/archivo` | ADMIN y SUPERVISOR | Vueltas por parcela y tarea (filtros campaña y estado, CSV); CSV de horas por trabajador y de tareas realizadas por fechas; archivar hasta una fecha (solo ADMIN) e historial de archivados |
 
@@ -44,9 +44,16 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 - SUPERVISOR (migración 013): ve todos; crea partes a nombre de cualquier operario activo (para quien olvidó hacerlo);
   **corrige** los Pendientes y Cerrados de cualquiera (no los Aprobados ni Rechazados); cierra cualquiera y aprueba o rechaza
   los Cerrados, también los que él creó, salvo aquellos de los que es titular (esos los revisa un ADMIN).
-- Al corregir un parte ya cerrado (supervisor o ADMIN) no se le pueden quitar todas las tareas si no es de mantenimiento en nave.
+- Al corregir un parte ya cerrado (supervisor o ADMIN) no se le pueden quitar todas las tareas (sin contar MOTIVOS PERSONALES).
 - ADMIN: ve todos, edita cualquiera en cualquier estado (sigue en su estado), cierra, aprueba/rechaza y borra (con copia en auditoría).
-- Cerrar exige un parte válido y, si no es de mantenimiento en nave, al menos una tarea.
+- Cerrar exige un parte válido y al menos una tarea que no sea MOTIVOS PERSONALES (migración 018; ya no hay casilla de nave).
+- Mantenimiento como tarea (migración 018): MANTENIMIENTO NAVE (solo horas; puede ser la primera tarea) y MANTENIMIENTO
+  VEHÍCULOS (vehículo o apero, sin finca; no puede ser la primera). No llevan finca ni cambian la finca en curso. La primera
+  tarea (sin contar MOTIVOS PERSONALES) es un DESPLAZAMIENTO o un MANTENIMIENTO NAVE.
+- Guardar por líneas (migración 019): la jornada y cada línea se guardan por separado. Una línea nueva empieza cuando acaba
+  la última o más tarde; una editada sigue entre la anterior y la siguiente; quitar o editar una línea, o cambiar la jornada,
+  se rechaza si el resto del parte deja de ser válido.
+- Almuerzo y comida (migración 017): 0 o más y sin superar la jornada.
 - Horas extra (migración 011): las calcula la BD, `max(total − th_jornada, 0)` con `th_jornada` = 8,5 h (desde la 012).
   El operario las ve sin poder cambiarlas; el ADMIN puede corregirlas a mano (se mantienen hasta que cambien horas o pausas).
 - Valores iniciales (migración 012): el formulario propone 07:30 – 18:00, 30 min de almuerzo y 90 de comida, leídos de la
@@ -78,11 +85,11 @@ Estados cubiertos: carga, lista vacía, error (con reintentar), éxito (aviso fl
 | Campo `TIEMPO` | **No se muestra**: su significado sigue sin confirmar en el diseño |
 | Parte rechazado | Decidido 28/10: solo lo corrige el ADMIN y sigue en `Rechazado` (no vuelve a `Pendiente`) |
 | Login en Supabase | Email + contraseña (cuentas creadas en el Dashboard) y, como alternativa, enlace mágico. El diseño original hablaba de Google |
-| Guardado de cabecera + líneas | Una sola llamada a la función `guardar_parte()` (atómica, migración 007b). Solo si no existiera, el boceto recurre al método antiguo en varios pasos |
+| Guardado de cabecera + líneas | Desde la 019, por separado: `guardar_cabecera()` al aceptar la jornada y `guardar_linea()` / `borrar_linea()` al aceptar o quitar cada línea. `guardar_parte()` (todo de una vez) se mantiene por compatibilidad |
 | Almuerzo / comida | Se piden en minutos y se guardan como `interval` |
 
 ## Fuera de alcance (existe en el diseño, no en el boceto)
-Partes de mantenimiento (`partes_mant`), gestión de catálogos y usuarios (admin), pantalla de configuración, "Mi perfil", fotos y GPS,
+Gestión de catálogos y usuarios (admin), pantalla de configuración, "Mi perfil", fotos y GPS,
 notificaciones. El PDF real lo dibuja la función del servidor `generar-pdf` (en el modo demo se muestra una página para imprimir).
 
 ## Archivos del boceto

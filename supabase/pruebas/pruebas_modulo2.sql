@@ -31,7 +31,7 @@ begin
     id_b     := guardar_parte(null, cab || '{"fecha":"2099-04-02"}', lin);
     id_c     := guardar_parte(null, cab || '{"fecha":"2099-04-03"}', lin);
     id_vacio := guardar_parte(null, cab || '{"fecha":"2099-04-04"}', '[]');
-    id_nave  := guardar_parte(null, cab || '{"fecha":"2099-04-05","mat_nave":true}', '[]');
+    id_nave  := guardar_parte(null, cab || '{"fecha":"2099-04-05"}', jsonb_build_array(jsonb_build_object('tarea','TN001','h_ini','07:00','h_fin','08:00')));  -- «018» sin mat_nave
     select string_agg(distinct estado::text, ',') into x from partes_cab where id_parte in (id_a,id_b,id_c,id_vacio,id_nave);
     reset role; res := res || to_jsonb('E01 operario crea 5 partes (esperado OK, todos Pendiente): estados='||x);
   exception when others then res := res || to_jsonb('E01 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
@@ -39,14 +39,14 @@ begin
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     perform cerrar_parte(id_vacio);
-    reset role; res := res || to_jsonb('E02 cerrar parte sin tareas y sin nave (esperado bloqueado): FALLO, se permitió'::text);
-  exception when others then res := res || to_jsonb('E02 cerrar sin tareas ni nave: bloqueado '||sqlstate||' '||sqlerrm); end;
+    reset role; res := res || to_jsonb('E02 cerrar parte sin tareas (esperado bloqueado): FALLO, se permitió'::text);
+  exception when others then res := res || to_jsonb('E02 cerrar sin tareas: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     perform cerrar_parte(id_nave);
     select estado::text into x from partes_cab where id_parte = id_nave;
-    reset role; res := res || to_jsonb('E03 cerrar parte en nave sin tareas (esperado OK): '||x);
+    reset role; res := res || to_jsonb('E03 cerrar parte solo con MANTENIMIENTO NAVE (esperado OK): '||x);
   exception when others then res := res || to_jsonb('E03 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -244,7 +244,7 @@ begin
   begin
     perform set_config('request.jwt.claims','',true); reset role;
     update partes_cab set estado = 'Cerrado' where id_parte = id_vacio;
-    res := res || to_jsonb('X04 cerrar desde SQL un parte sin tareas ni nave (esperado bloqueado): FALLO, se permitió'::text);
+    res := res || to_jsonb('X04 cerrar desde SQL un parte sin tareas (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('X04 cerrar sin tareas desde SQL: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   -- Error a propósito: deshace todo lo anterior y muestra los resultados.

@@ -61,8 +61,8 @@ Detalle y PDF: tareas y mantenimientos en dos tablas separadas; desaparece "Mant
 | 3 | **019** validación por línea: `guardar_cabecera()`, `guardar_linea()`, `borrar_linea()` con regla de orden y permisos actuales. `guardar_parte()` se mantiene por compatibilidad | Hecho 10/11: 019 aplicada y verificada 14/14 |
 | 4 | Función `generar-pdf`: sección de mantenimientos, sin `mat_nave` | Pendiente |
 | 5 | App: `rules.js` (tipos nuevos, `validarLinea`), `supabase.js` y `mock.js` (funciones nuevas), `main.js` (formulario en 3 pestañas; detalle y lista sin nave) | Hecho 10/11 con 2 pestañas (Jornada · Líneas del parte); probado en el navegador en modo demo |
-| 6 | Pruebas: `pruebas_modulo9.sql` (mantenimiento), `pruebas_modulo10.sql` (por línea); adaptar las de los módulos 1 a 8 que usan `mat_nave` | Pendiente |
-| 7 | Documentación: decisiones, `supabase/README.md`, `docs/BOCETO.md` | Pendiente |
+| 6 | Pruebas: `pruebas_modulo9.sql` (mantenimiento), `pruebas_modulo10.sql` (por línea); adaptar las de los módulos 1 a 8 que usan `mat_nave` | Hecho 10/11: módulos 1, 2, 3 y 6 adaptados y repetidos (31/31, 32/32, 21/21, 10/10); módulo 9 14/14 y 10 14/14 |
+| 7 | Documentación: decisiones, `supabase/README.md`, `docs/BOCETO.md` | Hecho 10/11 |
 
 Estimación de los pasos 2 a 7: 2 o 3 días (primero BD y pruebas, después pantalla).
 

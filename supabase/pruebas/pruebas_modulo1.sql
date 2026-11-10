@@ -195,8 +195,8 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    perform guardar_parte(null, cab || '{"fecha":"2099-03-17","mat_nave":true}', '[]');
-    reset role; res := res || to_jsonb('M21 parte en nave sin tareas (esperado OK): OK'::text);
+    perform guardar_parte(null, cab || '{"fecha":"2099-03-17"}', jsonb_build_array(jsonb_build_object('tarea','TN001','h_ini','07:00','h_fin','08:00')));  -- «018» sin mat_nave
+    reset role; res := res || to_jsonb('M21 parte solo con MANTENIMIENTO NAVE (esperado OK): OK'::text);
   exception when others then res := res || to_jsonb('M21 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin

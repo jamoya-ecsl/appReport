@@ -113,10 +113,11 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    id2 := guardar_parte(null, cab || '{"fecha":"2099-08-02","mat_nave":true}', lin);
+    id2 := guardar_parte(null, cab || '{"fecha":"2099-08-02"}',  -- «018» sin mat_nave: la nave es una línea más
+      lin || jsonb_build_array(jsonb_build_object('tarea','TN001','h_ini','11:00','h_fin','12:00')));
     perform cerrar_parte(id2);
-    reset role; res := res || to_jsonb('F09 parte de nave con una tarea sin responder (esperado bloqueado: también se exige): FALLO, se permitió'::text);
-  exception when others then res := res || to_jsonb('F09 parte de nave sin responder: bloqueado '||sqlstate||' '||sqlerrm); end;
+    reset role; res := res || to_jsonb('F09 parte con MANTENIMIENTO NAVE y una tarea sin responder (esperado bloqueado: también se exige): FALLO, se permitió'::text);
+  exception when others then res := res || to_jsonb('F09 parte con nave sin responder: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     x := 'anon='||has_function_privilege('anon', 'public.requiere_fin_vuelta(public.partes_det)', 'execute')

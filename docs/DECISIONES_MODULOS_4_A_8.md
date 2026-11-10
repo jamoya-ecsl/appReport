@@ -56,3 +56,9 @@ El diseño de pantallas lo hace **Lovable**; la base de datos, las funciones, el
   (por defecto `partes`). Una carpeta de un ordenador o servidor de la oficina no es posible: Supabase no puede escribir ahí.
 - **Archivar no exige el PDF** (decidido 05/11). De los partes archivados sin PDF solo quedan el resumen de tareas y el
   CSV de horas si se exportó. Los PDF existentes se conservan al archivar o borrar el parte.
+
+## 9 y 10 · Mantenimiento como tarea y guardado por líneas (018, 019) — 10/11/2026
+
+Las decisiones de los módulos 9 y 10 (mantenimiento como tipo de tarea, sin `partes_mant` ni casilla de nave; pantalla
+del parte en 2 pestañas, Jornada y Líneas del parte; cada línea se valida y se guarda al pulsar "Aceptar", en orden de
+hora) están en `docs/PLAN_MODULOS_9_Y_10.md`.

@@ -142,7 +142,7 @@ begin
   -- Partes de partida para H10: id3 cerrado (9,5 h → 1,5) e id4 con corrección manual
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    id3 := guardar_parte(null, c95 || '{"fecha":"2099-05-03","mat_nave":true}', '[]');
+    id3 := guardar_parte(null, c95 || '{"fecha":"2099-05-03"}', jsonb_build_array(jsonb_build_object('tarea','TN001','h_ini','07:00','h_fin','08:00')));  -- «018» sin mat_nave: se cierra por su línea de nave
     id4 := guardar_parte(null, c95 || '{"fecha":"2099-05-04"}', '[]');
     perform set_config('request.jwt.claims',c_sup,true);
     perform cerrar_parte(id3);

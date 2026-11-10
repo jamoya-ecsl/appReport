@@ -32,6 +32,8 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
+Pruebas de los módulos 1, 2, 3 y 6 adaptadas a la 018 (sin `mat_nave`; la nave es una línea MANTENIMIENTO NAVE) y repetidas
+el 10/11 con 017–019 aplicadas: 31/31, 32/32, 21/21 y 10/10.
 Plan de lo siguiente (correcciones, mantenimiento como tarea, parte en 3 pestañas y validación por línea):
 `docs/PLAN_MODULOS_9_Y_10.md`.
 
@@ -68,8 +70,12 @@ Reglas que impone la BD (no solo la interfaz):
   Sí puede revisar los que creó para otro operario.
 - (013) Nadie crea partes a nombre de un operario dado de baja.
 - (010) Todo parte nace Pendiente; solo se revisa un parte Cerrado; nadie lo reabre. Un parte Cerrado lo modifican
-  SUPERVISOR y ADMIN (013); Aprobados y Rechazados, solo el ADMIN. Cerrar sin nave exige al menos una tarea, y (013) un
-  parte que no está Pendiente y no es de nave no puede quedarse sin tareas al corregirlo.
+  SUPERVISOR y ADMIN (013); Aprobados y Rechazados, solo el ADMIN. Cerrar exige al menos una tarea que no sea MOTIVOS
+  PERSONALES (018; antes, salvo partes de nave), y un parte que no está Pendiente no puede quedarse sin ellas al corregirlo.
+- (018) MANTENIMIENTO NAVE (solo horas) y MANTENIMIENTO VEHÍCULOS (vehículo o apero, sin finca) son tareas del parte;
+  la primera tarea (sin contar MOTIVOS PERSONALES) es DESPLAZAMIENTO o MANTENIMIENTO NAVE. Ya no existen `partes_mant` ni `mat_nave`.
+- (019) Guardar por partes: la línea nueva empieza cuando acaba la última; la editada sigue entre la anterior y la siguiente.
+- (017) Almuerzo y comida: 0 o más y sin superar la jornada.
 - Un parte por operario y día; salida > entrada; la parcela debe ser de su finca.
 - (009) Horas y pausas en múltiplos de 15 min; `h_ext` ≥ 0 en cuartos de hora.
 - (009) Líneas dentro de la jornada y sin solapes; la primera (sin contar MOTIVOS PERSONALES) es un
