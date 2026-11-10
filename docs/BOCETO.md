@@ -105,7 +105,8 @@ notificaciones. El PDF real lo dibuja la función del servidor `generar-pdf` (en
 | `scripts/serve.mjs` | Servidor local sin dependencias; no envía nunca claves secretas al navegador |
 
 ## Qué llevar a Lovable
-- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `saveParte`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`, `listVueltas`, `listTareasResumen`, `listHorasTrabajador`, `listArchivos`, `archivarPartes`, `listPdfs`, `generarPdf`, `urlPdf`) y los mensajes de error de `supabase.js`.
-- **Ajustar**: login (Google o email según decidáis) y el formulario para usarlo desde el móvil en el campo. El guardado atómico ya existe: `rpc('guardar_parte')`.
+El prompt completo, por bloques y listo para pegar, está en **`docs/PROMPT_LOVABLE.md`**.
+- **Trasladar tal cual**: el flujo de pantallas, las reglas de `rules.js`, la interfaz de datos (`listPartes`, `getParte`, `guardarCabecera`, `guardarLinea`, `borrarLinea`, `cerrarParte`, `revisarParte`, `borrarParte`, `getValoresIniciales`, `listVueltas`, `listTareasResumen`, `listHorasTrabajador`, `listArchivos`, `archivarPartes`, `listPdfs`, `listPdfsGenerados`, `generarPdf`, `urlPdf`) y los mensajes de error de `supabase.js`.
+- **Ajustar**: el formulario para usarlo desde el móvil en el campo. Se guarda por partes (019): `rpc('guardar_cabecera')`, `rpc('guardar_linea')` y `rpc('borrar_linea')`.
 - **Reconstruir**: todo el diseño visual (Lovable usa React + Tailwind); este HTML/JS es desechable.
-- **Añadir después**: mantenimiento, administración de catálogos, informes, fotos (Storage) y notificaciones.
+- **Añadir después**: administración de catálogos y usuarios, configuración, informes, fotos (Storage) y notificaciones. El mantenimiento ya está hecho, como tipos de tarea (018).
