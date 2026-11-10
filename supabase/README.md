@@ -35,6 +35,10 @@ Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, a
 Pruebas de los módulos 1, 2, 3 y 6 adaptadas a la 018 (sin `mat_nave`; la nave es una línea MANTENIMIENTO NAVE) y repetidas
 el 10/11 con 017–019 aplicadas: 31/31, 32/32, 21/21 y 10/10.
 Reglas de la app (`app/js/rules.js`) con pruebas automáticas: `npm test` (`scripts/test-rules.mjs`, casos de los módulos 1, 9 y 10).
+Seguridad de las contraseñas (10/11/2026): la protección contra contraseñas filtradas (HaveIBeenPwned) exige un plan de
+pago y no está activada; el aviso del asesor de Supabase se acepta. Se compensa con: registro público desactivado (solo un
+ADMIN crea cuentas), longitud mínima de 12 y letras, números y símbolos (Authentication → Sign In / Providers → Email),
+contraseñas únicas al crear cada usuario y, como alternativa, entrada con enlace por email.
 Plan de lo siguiente (correcciones, mantenimiento como tarea, parte en 3 pestañas y validación por línea):
 `docs/PLAN_MODULOS_9_Y_10.md`.
 
