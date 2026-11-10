@@ -58,7 +58,7 @@ Detalle y PDF: tareas y mantenimientos en dos tablas separadas; desaparece "Mant
 |---|---|---|
 | 0 | Guardar en git el módulo 8 (PDF) | Hecho 10/11 |
 | 1 | **017** `017_correcciones_analisis.sql`: sin pausas negativas; pausas no mayores que la jornada. App: fecha de hoy en hora local, listados y CSV sin el corte de 1.000 filas, pausas negativas rechazadas | Hecho 10/11: app; 017 aplicada y verificada 6/6 |
-| 2 | **018** mantenimiento como tarea: tipos y tareas nuevos; `validar_parte()`; regla de cierre (disparador de estado); quitar `mat_nave` de `guardar_parte()`, `pdf_datos()` y `panel_resumen()`; borrar `partes_mant` y `mat_nave` (comprobando antes que están vacías). Irreversible: se aplica solo con autorización | Escrita y ensayada 14/14 (con deshacer). App y `generar-pdf` adaptadas (reglas, sin casilla de nave). **Pendiente: aplicar en el SQL Editor y desplegar `generar-pdf`** |
+| 2 | **018** mantenimiento como tarea: tipos y tareas nuevos; `validar_parte()`; regla de cierre (disparador de estado); quitar `mat_nave` de `guardar_parte()`, `pdf_datos()` y `panel_resumen()`; borrar `partes_mant` y `mat_nave` (comprobando antes que están vacías). Irreversible: se aplica solo con autorización | Hecho 10/11: 018 aplicada y verificada 14/14; app y `generar-pdf` (v2 desplegada) adaptadas |
 | 3 | **019** validación por línea: `guardar_cabecera()`, `guardar_linea()`, `borrar_linea()` con regla de orden y permisos actuales. `guardar_parte()` se mantiene por compatibilidad | Pendiente |
 | 4 | Función `generar-pdf`: sección de mantenimientos, sin `mat_nave` | Pendiente |
 | 5 | App: `rules.js` (tipos nuevos, `validarLinea`), `supabase.js` y `mock.js` (funciones nuevas), `main.js` (formulario en 3 pestañas; detalle y lista sin nave) | Pendiente |

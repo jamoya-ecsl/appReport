@@ -1,7 +1,7 @@
 -- =====================================================================
 -- 018 · Módulo 9: el mantenimiento pasa a ser un tipo de tarea (docs/PLAN_MODULOS_9_Y_10.md, paso 2).
--- PROPUESTA pendiente de revisión: no aplicar hasta que se autorice.
--- Ejecutar en Dashboard → SQL Editor (contiene DROP TABLE, DROP COLUMN y DROP CONSTRAINT, que el conector bloquea).
+-- APLICADA 10/11/2026 con el conector; verificada 14/14 (pruebas_modulo9.sql). Datos de prueba, autorizado por el usuario.
+-- Contiene DROP TABLE, DROP COLUMN y DROP CONSTRAINT: el conector la aplicó sin bloquearla (10/11/2026).
 -- IRREVERSIBLE: borra la tabla partes_mant y la columna partes_cab.mat_nave. Antes comprueba que están
 -- vacías / sin uso y, si no, se para sin cambiar nada.
 -- Precondición: 017 aplicada.
