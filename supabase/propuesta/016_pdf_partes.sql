@@ -1,7 +1,7 @@
 -- =====================================================================
 -- 016 · Módulo 8: PDF del parte, a petición.
--- PROPUESTA pendiente de revisión: no aplicar hasta que se autorice.
--- Ejecutar en Dashboard → SQL Editor (contiene DROP CONSTRAINT, que el conector bloquea).
+-- APLICADA 05/11/2026 desde el SQL Editor (contiene DROP CONSTRAINT, que el conector bloquea).
+-- Verificada 15/15 (pruebas_modulo8.sql). Función generar-pdf desplegada 05/11 (verify_jwt activado).
 -- Precondición: 015 aplicada.
 --
 -- Decisiones (docs/DECISIONES_MODULOS_4_A_8.md, cambio del 05/11):

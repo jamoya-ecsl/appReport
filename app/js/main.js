@@ -8,7 +8,7 @@ import {
   puedeCerrar, puedeRevisar, puedeBorrar, errorCierre,
   calcHoras, calcTotHoras, calcHExt, calcHtTareas, validarParte, tipoTarea, etiquetaTipo, ordenarLineas,
   VALORES_INICIALES, conValoresIniciales, puedeCrearParaOtros, errorSinTareas,
-  requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv, puedeGenerarPdf,
+  requiereFinVuelta, textoFinVuelta, errorFinVuelta, aCsv, puedeGenerarPdf, fechaLocal,
 } from './rules.js';
 
 const root = document.getElementById('app');
@@ -168,7 +168,7 @@ async function viewInicio() {
   try {
     const partes = await st.api.listPartes({});
     const n = (e) => partes.filter((p) => p.estado === e).length;
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = fechaLocal();
     const tieneHoy = partes.some((p) => p.fecha === hoy && p.operario === u.cod_ope);
     main.innerHTML = `
       <div class="page-head">
@@ -377,7 +377,7 @@ async function viewForm(id) {
   let ini = VALORES_INICIALES;
   try { ini = (await st.api.getValoresIniciales()) || ini; } catch { /* se usan los de rules.js */ }
   const cab = p || {
-    operario: u.cod_ope, fecha: new Date().toISOString().slice(0, 10), h_ent: ini.h_ent, h_sal: ini.h_sal,
+    operario: u.cod_ope, fecha: fechaLocal(), h_ent: ini.h_ent, h_sal: ini.h_sal,
     t_alm_min: ini.t_alm_min, t_com_min: ini.t_com_min, h_ext: 0, h_ext_manual: false, mat_nave: false, obs: '',
   };
   const { cat } = st;
@@ -567,7 +567,7 @@ async function viewForm(id) {
 }
 
 // ---------- Vueltas, exportaciones y archivo (migración 015) ----------
-const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
+const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return fechaLocal(d); };
 
 function descargarCsv(nombre, filas, columnas) {
   const url = URL.createObjectURL(new Blob([aCsv(filas, columnas)], { type: 'text/csv;charset=utf-8' }));

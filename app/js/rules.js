@@ -54,6 +54,11 @@ const aMin = (t) => {
   return h * 60 + m + (Number(s) || 0) / 60;
 };
 const r2 = (n) => Math.round(n * 100) / 100;
+
+// Fecha 'AAAA-MM-DD' en la hora del dispositivo. toISOString() da la fecha en UTC: en España, entre
+// las 00:00 y la 01:00 o las 02:00, sería la del día anterior.
+export const fechaLocal = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const hhmm = (t) => String(t || '').slice(0, 5);
 
 // Múltiplo de 15 minutos y sin segundos (como las restricciones *_cuartos_hora de la BD).
@@ -163,6 +168,8 @@ export function validarParte(cab, lineas, cat) {
   if (cab.h_sal && !esCuartoDeHora(cab.h_sal)) e.push('La hora de salida debe ir en intervalos de 15 minutos (:00, :15, :30, :45).');
   if ((Number(cab.t_alm_min) || 0) % 15 !== 0) e.push('El almuerzo debe ir en múltiplos de 15 minutos.');
   if ((Number(cab.t_com_min) || 0) % 15 !== 0) e.push('La comida debe ir en múltiplos de 15 minutos.');
+  // Como partes_cab_pausas_ok (017): un valor negativo inflaría el total y las horas extra.
+  if (Number(cab.t_alm_min) < 0 || Number(cab.t_com_min) < 0) e.push('El almuerzo y la comida no pueden ser negativos.');
   const hExt = Number(cab.h_ext) || 0;
   if (hExt < 0 || !Number.isInteger(hExt * 4)) e.push('Las horas extra deben ser 0 o más, en múltiplos de 0,25 h.');
 

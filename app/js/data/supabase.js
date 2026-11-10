@@ -22,6 +22,7 @@ function traducir(error) {
     else if (/h_ext_ok/.test(m)) e.message = 'Las horas extra deben ser 0 o más, en múltiplos de 0,25 h.';
     else if (/rechazo_comentado/.test(m)) e.message = 'Para rechazar hay que escribir un comentario.';
     else if (/horas_ok/.test(m)) e.message = 'La hora de fin debe ser posterior a la de inicio.';
+    else if (/pausas_ok/.test(m)) e.message = 'El almuerzo y la comida no pueden ser negativos ni sumar más que la jornada.';
     else e.message = 'Datos no válidos: revisa las horas o, si rechazas, el comentario.';
   } else if (c === 'PGRST202') {
     e.message = 'Falta una función de la app en Supabase (guardar_parte, cerrar_parte, revisar_parte o borrar_parte).';
@@ -33,6 +34,19 @@ function traducir(error) {
   return e;
 }
 const ok = ({ data, error }) => { if (error) throw traducir(error); return data; };
+
+// Supabase devuelve como mucho 1.000 filas por consulta: sin esto, listados y CSV se cortaban sin avisar.
+// consulta() crea la consulta de nuevo en cada página; su orden debe identificar cada fila (si no, al
+// pasar de página se podrían repetir o saltar filas).
+const PAGINA = 1000;
+async function todas(consulta) {
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const pagina = ok(await consulta().range(desde, desde + PAGINA - 1));
+    filas.push(...pagina);
+    if (pagina.length < PAGINA) return filas;
+  }
+}
 
 function traducirAuth(error) {
   const m = String(error?.message || '');
@@ -117,14 +131,17 @@ export function createSupabaseApi(cfg) {
     async listPartes(f = {}) {
       // ht_tareas: horas de tareas sin MOTIVOS PERSONALES, calculadas por la BD al consultar (migración 011).
       const select = f.finca ? '*, ht_tareas, lineas:partes_det(finca), filtro:partes_det!inner(finca)' : '*, ht_tareas, lineas:partes_det(finca)';
-      let q = sb.from('partes_cab').select(select)
-        .order('fecha', { ascending: false }).order('num_parte', { ascending: false });
-      if (f.estado) q = q.eq('estado', f.estado);
-      if (f.operario) q = q.eq('operario', f.operario);
-      if (f.finca) q = q.eq('filtro.finca', f.finca);
-      if (f.desde) q = q.gte('fecha', f.desde);
-      if (f.hasta) q = q.lte('fecha', f.hasta);
-      return ok(await q).map(normParte);
+      const consulta = () => {
+        let q = sb.from('partes_cab').select(select)
+          .order('fecha', { ascending: false }).order('num_parte', { ascending: false });
+        if (f.estado) q = q.eq('estado', f.estado);
+        if (f.operario) q = q.eq('operario', f.operario);
+        if (f.finca) q = q.eq('filtro.finca', f.finca);
+        if (f.desde) q = q.gte('fecha', f.desde);
+        if (f.hasta) q = q.lte('fecha', f.hasta);
+        return q;
+      };
+      return (await todas(consulta)).map(normParte);
     },
 
     async getParte(id) {
@@ -174,29 +191,39 @@ export function createSupabaseApi(cfg) {
     // ---------- Archivo de tareas y vueltas (migración 015). Solo ADMIN y SUPERVISOR ven filas. ----------
     // Vueltas: archivo + partes Aprobados aún sin archivar (vista vueltas).
     async listVueltas(f = {}) {
-      let q = sb.from('vueltas').select('*')
-        .order('campana', { ascending: false }).order('parcela').order('tarea').order('num_vuelta');
-      if (f.campana) q = q.eq('campana', f.campana);
-      if (f.estado) q = q.eq('estado', f.estado);
-      return ok(await q);
+      return todas(() => {
+        let q = sb.from('vueltas').select('*')
+          .order('campana', { ascending: false }).order('parcela').order('tarea').order('num_vuelta');
+        if (f.campana) q = q.eq('campana', f.campana);
+        if (f.estado) q = q.eq('estado', f.estado);
+        return q;
+      });
     },
     // Tareas realizadas (vista tareas_resumen): misma fuente que las vueltas, fila a fila.
     async listTareasResumen(f = {}) {
-      let q = sb.from('tareas_resumen').select('*').order('fec_tarea').order('num_parte');
-      if (f.desde) q = q.gte('fec_tarea', f.desde);
-      if (f.hasta) q = q.lte('fec_tarea', f.hasta);
-      return ok(await q);
+      // Orden por todos los campos por los que se agrupa la vista: identifica cada fila.
+      return todas(() => {
+        let q = sb.from('tareas_resumen').select('*').order('fec_tarea').order('num_parte')
+          .order('operario').order('tarea').order('finca').order('parcela').order('vehiculo').order('apero');
+        if (f.desde) q = q.gte('fec_tarea', f.desde);
+        if (f.hasta) q = q.lte('fec_tarea', f.hasta);
+        return q;
+      });
     },
     // Horas por trabajador (vista horas_trabajador): solo existen mientras no se archivan los partes.
     async listHorasTrabajador(f = {}) {
-      let q = sb.from('horas_trabajador').select('*').order('fecha').order('operario');
-      if (f.desde) q = q.gte('fecha', f.desde);
-      if (f.hasta) q = q.lte('fecha', f.hasta);
-      return ok(await q).map((r) => ({ ...r, h_ent: hhmm(r.h_ent), h_sal: hhmm(r.h_sal) }));
+      // Un parte por operario y día: fecha + operario identifica cada fila.
+      const filas = await todas(() => {
+        let q = sb.from('horas_trabajador').select('*').order('fecha').order('operario');
+        if (f.desde) q = q.gte('fecha', f.desde);
+        if (f.hasta) q = q.lte('fecha', f.hasta);
+        return q;
+      });
+      return filas.map((r) => ({ ...r, h_ent: hhmm(r.h_ent), h_sal: hhmm(r.h_sal) }));
     },
     // Archivados hechos, el último primero.
     async listArchivos() {
-      return ok(await sb.from('archivos_partes').select('*').order('hasta', { ascending: false }));
+      return todas(() => sb.from('archivos_partes').select('*').order('hasta', { ascending: false }));
     },
     // Solo ADMIN. Devuelve { hasta, partes, lineas, filas, rechazados }.
     async archivarPartes(hasta) {

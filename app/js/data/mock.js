@@ -5,7 +5,7 @@
 import {
   esGestor, puedeEditar, puedeCerrar, puedeRevisar, puedeBorrar, errorCierre, puedeCrearParaOtros, errorSinTareas,
   normalizarFinVuelta, errorFinVuelta, errorFechaArchivada, filasResumen, calcVueltas,
-  puedeGenerarPdf,
+  puedeGenerarPdf, fechaLocal,
   calcHoras, calcTotHoras, validarParte, ordenarLineas, resolverHExt, calcHtTareas, conValoresIniciales,
 } from '../rules.js';
 
@@ -56,7 +56,7 @@ const CATALOGOS = {
 const dia = (offset) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return fechaLocal(d);
 };
 
 function semilla() {
@@ -356,7 +356,7 @@ export function createMockApi(reason) {
       await wait(500);
       const u = yo();
       if (u.rol_app !== 'ADMIN') throw new Error('Solo un ADMIN puede archivar partes');
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = fechaLocal();
       if (!hasta || hasta >= hoy) throw new Error('Solo se puede archivar hasta ayer como mucho');
       const ult = ultimoArchivo();
       if (ult && hasta <= ult) throw new Error(`Ya está archivado hasta el ${dma(ult)}`);

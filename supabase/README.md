@@ -26,9 +26,12 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `014_fin_vuelta.sql` | Aplicada 04/11 desde el SQL Editor (no figura en el historial); verificada 10/10 con `pruebas/pruebas_modulo6.sql` | Módulo 6: `partes_det.fin_vuelta` (Sí/No/sin responder) en tareas con parcela y tipo POR SUPERFICIE o POR HORAS (en el resto, No); obligatoria al cerrar y en partes ya cerrados; `requiere_fin_vuelta(partes_det)` para la app |
 | `015_archivo_tareas_y_vueltas.sql` | Aplicada 05/11 desde el SQL Editor (no figura en el historial); verificada 15/15 con `pruebas/pruebas_modulo7.sql` | Módulo 7: campaña agrícola (`cfc_inicio` = 09-01, `campana_de()`); `archivar_partes(hasta)` (solo ADMIN): exige que no quede ningún parte Pendiente o Cerrado en el rango, pasa las tareas de los Aprobados a `tareas_realizadas` (sin MOTIVOS PERSONALES ni DESPLAZAMIENTO, agrupadas) y borra los partes; los Rechazados se borran sin archivar con su copia en la auditoría; registro en `archivos_partes`; no se crean ni modifican partes en fechas archivadas; vistas `tareas_resumen`, `vueltas` y `horas_trabajador` (solo ADMIN y SUPERVISOR) |
 | `016_pdf_partes.sql` + `functions/generar-pdf` | Aplicada 05/11 desde el SQL Editor (no figura en el historial); verificada 15/15 con `pruebas/pruebas_modulo8.sql`. Función `generar-pdf` desplegada 05/11 (verify_jwt activado) | Módulo 8: PDF del parte **a petición** (botón), solo de partes Aprobados y solo SUPERVISOR y ADMIN; lo ven también el operario titular; versión nueva solo si el parte cambió; bucket privado `partes-pdf`, carpeta configurable `cfp_carpeta`; tabla `partes_pdf`; `pdf_pedir()` y `pdf_marcar()`; archivar no exige PDF y los PDF se conservan |
+| `017_correcciones_analisis.sql` | **Propuesta, sin aplicar** (pruebas: `pruebas/pruebas_correcciones_017.sql`) | Almuerzo y comida no negativos y no mayores que la jornada (`partes_cab_pausas_ok`): un valor negativo inflaba el total y las horas extra |
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
+Plan de lo siguiente (correcciones, mantenimiento como tarea, parte en 3 pestañas y validación por línea):
+`docs/PLAN_MODULOS_9_Y_10.md`.
 
 El conector de Supabase usado desde Claude Code bloquea las sentencias con `DELETE`/`DROP`/`UPDATE`;
 por eso 004b y 007b se ejecutaron en Dashboard → SQL Editor. Lo ejecutado desde el SQL Editor no queda en
