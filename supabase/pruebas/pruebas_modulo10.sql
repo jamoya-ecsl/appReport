@@ -8,7 +8,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
   f1 text; f2 text; v1 text; t1 text; x text; n int;
@@ -100,7 +100,7 @@ begin
   -- ===== PERMISOS =====
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    id2 := guardar_cabecera(null, cab || '{"fecha":"2099-09-02","operario":"T002"}');
+    id2 := guardar_cabecera(null, cab || '{"fecha":"2099-09-02","operario":"T004"}');
     lx := guardar_linea(id2, jsonb_build_object('tarea','TD001','finca',f1,'vehiculo',v1,'h_ini','07:00','h_fin','07:30'));
     perform set_config('request.jwt.claims',c_op,true);
     perform guardar_linea(id2, tarea || '{"h_ini":"07:30","h_fin":"08:00"}');

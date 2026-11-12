@@ -6,7 +6,7 @@
 -- Ese error final deshace TODO lo que hacen las pruebas, así que no queda ningún cambio.
 -- Único rastro posible: un salto en la numeración de num_parte (las secuencias no se deshacen).
 --
--- Simula las cuentas reales: T003 (OPERARIO), T001 (SUPERVISOR), T000 (ADMIN).
+-- Simula las cuentas reales: T002 (OPERARIO), T001 (SUPERVISOR), T000 (ADMIN).
 -- Usa fechas de 2099 y una finca de prueba 'ZZTEST' para no chocar con datos reales.
 -- Cada línea del resultado empieza por un código (A=anon, O=operario, S=supervisor, D=admin).
 --
@@ -21,7 +21,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
@@ -47,12 +47,12 @@ begin
     res := res || to_jsonb('A01 anon lee (esperado todo 0): '||x);
   exception when others then res := res || to_jsonb('A01 anon lee: '||sqlstate||' '||sqlerrm); end;
 
-  -- ===== OPERARIO T003 =====
+  -- ===== OPERARIO T002 =====
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     select count(*) into n from operarios; x := 'operarios='||n;
     select count(*) into n from partes_cab; x := x||' partes='||n;
-    select count(*) into n from partes_cab where operario<>'T003'; x := x||' ajenos='||n;
+    select count(*) into n from partes_cab where operario<>'T002'; x := x||' ajenos='||n;
     select count(*) into n from auditoria; x := x||' auditoria='||n;
     select count(*) into n from fincas; x := x||' fincas='||n;
     select count(*) into n from operarios_nombres(); x := x||' operarios_nombres='||n;
@@ -76,7 +76,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    insert into partes_cab(operario, fecha, h_ent, h_sal, estado) values ('T003','2099-01-02','08:00','16:00','Aprobado');
+    insert into partes_cab(operario, fecha, h_ent, h_sal, estado) values ('T002','2099-01-02','08:00','16:00','Aprobado');
     reset role; res := res || to_jsonb('O04 operario crea parte ya aprobado: FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('O04 operario crea parte ya aprobado: bloqueado '||sqlstate||' '||sqlerrm); end;
 
@@ -122,7 +122,7 @@ begin
                         jsonb_build_object('tarea',t1,'finca',f1,'h_ini','13:00','h_fin','12:00')));
     reset role; res := res || to_jsonb('O10 guardado atómico con línea errónea: FALLO, se permitió'::text);
   exception when others then
-    select count(*) into n from partes_cab where operario='T003' and fecha='2099-01-08';
+    select count(*) into n from partes_cab where operario='T002' and fecha='2099-01-08';
     res := res || to_jsonb('O10 guardado atómico con línea errónea: bloqueado '||sqlstate||', cabeceras que quedaron='||n);
   end;
 
@@ -135,7 +135,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     delete from partes_cab where id_parte=new_op; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('O12 operario borra su parte (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('O12 operario borra su parte (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('O12 operario borra su parte: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -161,7 +161,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
     update partes_cab set h_ent='07:00' where id_parte=new_op; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('S02 supervisor cambia contenido de parte ajeno (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('S02 supervisor cambia contenido de parte ajeno (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('S02 supervisor cambia contenido de parte ajeno: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -191,7 +191,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    insert into partes_cab(operario, fecha, h_ent, h_sal) values ('T003','2099-01-10','08:00','16:00');
+    insert into partes_cab(operario, fecha, h_ent, h_sal) values ('T002','2099-01-10','08:00','16:00');
     reset role; res := res || to_jsonb('S06 supervisor crea parte de otro: FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('S06 supervisor crea parte de otro: bloqueado '||sqlstate||' '||sqlerrm); end;
 
@@ -204,13 +204,13 @@ begin
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
     update partes_det set obs='cambio en líneas propias', h_fin='13:00' where id_parte=new_sup; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('S08 supervisor cambia líneas de SU parte directamente (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('S08 supervisor cambia líneas de SU parte directamente (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('S08 supervisor cambia líneas de su parte: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
     update partes_cab set h_sal='17:00' where id_parte=new_sup; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('S09 supervisor cambia cabecera de SU parte (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('S09 supervisor cambia cabecera de SU parte (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('S09 supervisor cambia cabecera de su parte: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -270,8 +270,8 @@ begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
     perform guardar_parte(new_op, jsonb_build_object('fecha','2099-01-05','h_ent','08:00','h_sal','16:00','t_alm','30 minutes','t_com','0 minutes','obs','corregido por admin'), lin);
     select 'edita aprobado='||estado||'/'||coalesce(obs,'null') into x from partes_cab where id_parte=new_op;
-    tmp := guardar_parte(null, jsonb_build_object('operario','T003','fecha','2099-01-14','h_ent','08:00','h_sal','16:00'), lin);
-    x := x||' crea parte de T003=OK';
+    tmp := guardar_parte(null, jsonb_build_object('operario','T002','fecha','2099-01-14','h_ent','08:00','h_sal','16:00'), lin);
+    x := x||' crea parte de T002=OK';
     perform borrar_parte(tmp);
     select count(*) into n from partes_cab where id_parte=tmp;
     x := x||' borra parte (quedan)='||n;

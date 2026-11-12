@@ -10,7 +10,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';

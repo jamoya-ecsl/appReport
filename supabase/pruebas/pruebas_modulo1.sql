@@ -10,7 +10,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
@@ -26,7 +26,7 @@ begin
   -- Atajos para construir líneas: D = desplazamiento, T = tarea normal, P = motivos personales
   -- (se escriben inline con jsonb_build_object)
 
-  -- ===== OPERARIO T003 =====
+  -- ===== OPERARIO T002 =====
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     -- líneas enviadas desordenadas a propósito: el orden lo da h_ini
@@ -142,13 +142,13 @@ begin
   -- M15/M16: desde la 011 solo el ADMIN fija h_ext a mano (h_ext_manual); al operario se le ignora.
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    perform guardar_parte(null, cab || '{"fecha":"2099-03-15","operario":"T003","h_ext":0.3,"h_ext_manual":true}', '[]');
+    perform guardar_parte(null, cab || '{"fecha":"2099-03-15","operario":"T002","h_ext":0.3,"h_ext_manual":true}', '[]');
     reset role; res := res || to_jsonb('M15 h_ext = 0,3 (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('M15 h_ext = 0,3: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    perform guardar_parte(null, cab || '{"fecha":"2099-03-16","operario":"T003","h_ext":-1,"h_ext_manual":true}', '[]');
+    perform guardar_parte(null, cab || '{"fecha":"2099-03-16","operario":"T002","h_ext":-1,"h_ext_manual":true}', '[]');
     reset role; res := res || to_jsonb('M16 h_ext negativo (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('M16 h_ext negativo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
@@ -161,14 +161,14 @@ begin
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     delete from partes_det where id_parte = id_m01; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('M18 operario borra líneas directamente (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('M18 operario borra líneas directamente (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('M18 borrado directo de líneas: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   -- M19: desde la 010 no hay escritura directa en partes_cab por la API (0 filas).
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     update partes_cab set h_sal = '09:00' where id_parte = id_m01; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('M19 acortar la jornada por la API (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('M19 acortar la jornada por la API (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('M19 acortar la jornada por la API: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   -- M19b: desde el SQL Editor (sin sesión) el UPDATE sí se aplica, pero la comprobación diferida
@@ -259,19 +259,19 @@ begin
   -- ===== ADMIN T000 =====
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    perform guardar_parte(null, cab || jsonb_build_object('fecha','2099-03-21','operario','T003'), jsonb_build_array(
+    perform guardar_parte(null, cab || jsonb_build_object('fecha','2099-03-21','operario','T002'), jsonb_build_array(
       jsonb_build_object('tarea',t1,'finca',f1,'h_ini','07:00','h_fin','08:00')));
-    reset role; res := res || to_jsonb('D01 admin crea parte de T003 sin desplazamiento (esperado bloqueado): FALLO, se permitió'::text);
+    reset role; res := res || to_jsonb('D01 admin crea parte de T002 sin desplazamiento (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('D01 las reglas obligan al admin: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
-    tmp := guardar_parte(null, cab || jsonb_build_object('fecha','2099-03-22','operario','T003'), jsonb_build_array(
+    tmp := guardar_parte(null, cab || jsonb_build_object('fecha','2099-03-22','operario','T002'), jsonb_build_array(
       jsonb_build_object('tarea','TD001','finca',f1,'vehiculo',v1,'h_ini','07:00','h_fin','07:30')));
     perform guardar_parte(id_m01, cab || '{"fecha":"2099-03-01","obs":"corregido por admin"}',
       (select jsonb_agg(jsonb_build_object('id_linea',d.id_linea,'tarea',d.tarea,'finca',d.finca,'vehiculo',d.vehiculo,
                                            'h_ini',d.h_ini,'h_fin',d.h_fin)) from partes_det d where d.id_parte=id_m01));
-    reset role; res := res || to_jsonb('D02 admin crea parte de T003 y edita uno ajeno, cumpliendo reglas (esperado OK): OK'::text);
+    reset role; res := res || to_jsonb('D02 admin crea parte de T002 y edita uno ajeno, cumpliendo reglas (esperado OK): OK'::text);
   exception when others then res := res || to_jsonb('D02 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin

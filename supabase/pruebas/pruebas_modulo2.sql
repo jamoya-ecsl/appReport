@@ -8,7 +8,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
@@ -24,7 +24,7 @@ begin
     jsonb_build_object('tarea','TD001','finca',f1,'vehiculo',v1,'h_ini','07:00','h_fin','07:30'),
     jsonb_build_object('tarea',t1,'finca',f1,'h_ini','07:30','h_fin','12:00'));
 
-  -- ===== OPERARIO T003: crea partes de partida =====
+  -- ===== OPERARIO T002: crea partes de partida =====
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     id_a     := guardar_parte(null, cab || '{"fecha":"2099-04-01"}', lin);
@@ -78,12 +78,12 @@ begin
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
     update partes_cab set estado = 'Cerrado' where id_parte = id_c; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('E08 operario cambia estado con UPDATE directo (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('E08 operario cambia estado con UPDATE directo (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('E08 UPDATE directo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
     perform set_config('request.jwt.claims',c_op,true); set local role authenticated;
-    insert into partes_cab (operario, fecha, h_ent, h_sal) values ('T003','2099-04-06','07:00','15:00');
+    insert into partes_cab (operario, fecha, h_ent, h_sal) values ('T002','2099-04-06','07:00','15:00');
     reset role; res := res || to_jsonb('E09 operario INSERT directo en partes_cab (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('E09 INSERT directo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
@@ -163,7 +163,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
     update partes_cab set estado = 'Cerrado' where id_parte = id_c; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('R10 supervisor cambia estado con UPDATE directo (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('R10 supervisor cambia estado con UPDATE directo (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('R10 UPDATE directo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -198,7 +198,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
     update partes_cab set obs = 'directo' where id_parte = id_c; get diagnostics n = row_count;
-    reset role; res := res || to_jsonb('D04 admin UPDATE directo en partes_cab (esperado 0 filas): '||n);
+    reset role; res := res || to_jsonb('D04 admin UPDATE directo en partes_cab (esperado bloqueado 42501 desde la 020; antes, 0 filas): '||n);
   exception when others then res := res || to_jsonb('D04 UPDATE directo admin: bloqueado '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -237,7 +237,7 @@ begin
   begin
     perform set_config('request.jwt.claims','',true); reset role;
     insert into partes_cab (operario, fecha, h_ent, h_sal, estado, creado_por)
-    values ('T003','2099-04-07','07:00','15:00','Cerrado','sistema');
+    values ('T002','2099-04-07','07:00','15:00','Cerrado','sistema');
     res := res || to_jsonb('X03 crear un parte ya Cerrado desde SQL (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('X03 parte nuevo no Pendiente: bloqueado '||sqlstate||' '||sqlerrm); end;
 

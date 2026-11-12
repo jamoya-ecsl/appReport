@@ -7,7 +7,7 @@
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
@@ -32,11 +32,11 @@ begin
   -- ===== PERMISOS DEL SUPERVISOR =====
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    id1 := guardar_parte(null, cab || '{"fecha":"2099-07-01","operario":"T003"}', lin);
+    id1 := guardar_parte(null, cab || '{"fecha":"2099-07-01","operario":"T002"}', lin);
     select num_parte, 'operario='||operario||' creado_por='||creado_por||' estado='||estado
            ||' lineas='||(select count(*) from partes_det d where d.id_parte = id1)
       into num1, x from partes_cab where id_parte = id1;
-    reset role; res := res || to_jsonb('P01 supervisor crea parte para T003 (esperado operario=T003 creado_por=oficinas@escribanosl.es estado=Pendiente lineas=2): '||x);
+    reset role; res := res || to_jsonb('P01 supervisor crea parte para T002 (esperado operario=T002 creado_por=oficinas@escribanosl.es estado=Pendiente lineas=2): '||x);
   exception when others then res := res || to_jsonb('P01 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -102,7 +102,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    id2 := guardar_parte(null, cab || '{"fecha":"2099-07-02","operario":"T003"}', lin);
+    id2 := guardar_parte(null, cab || '{"fecha":"2099-07-02","operario":"T002"}', lin);
     select num_parte into num2 from partes_cab where id_parte = id2;
     perform cerrar_parte(id2);
     perform revisar_parte(id2, 'Rechazado', 'Falta la parcela (prueba)');
@@ -113,7 +113,7 @@ begin
   begin
     -- P10 se deshizo entero: se rehace el Rechazado y lo corrige el admin.
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    id2 := guardar_parte(null, cab || '{"fecha":"2099-07-02","operario":"T003"}', lin);
+    id2 := guardar_parte(null, cab || '{"fecha":"2099-07-02","operario":"T002"}', lin);
     select num_parte into num2 from partes_cab where id_parte = id2;
     perform cerrar_parte(id2);
     perform revisar_parte(id2, 'Rechazado', 'Falta la parcela (prueba)');
@@ -127,7 +127,7 @@ begin
 
   begin
     perform set_config('request.jwt.claims',c_sup,true); set local role authenticated;
-    id3 := guardar_parte(null, cab || '{"fecha":"2099-07-03","operario":"T003"}', lin);
+    id3 := guardar_parte(null, cab || '{"fecha":"2099-07-03","operario":"T002"}', lin);
     select num_parte into num3 from partes_cab where id_parte = id3;
     perform set_config('request.jwt.claims',c_op,true);
     perform guardar_parte(id3, cab || '{"fecha":"2099-07-03","obs":"lo completa el operario"}',

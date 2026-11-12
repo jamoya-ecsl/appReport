@@ -6,16 +6,16 @@
 -- Usa partes del año 2000 para no tocar partes reales. Código R (15 casos, R00 a R14).
 --
 -- Partes de prueba (parcela p1 + tarea t1, campaña desde el 1 de septiembre):
---   A  T003  30/08/2000  fin No   (campaña 1999/00) + motivos personales + tarea sin parcela
---   B  T003  01/09/2000  fin No   (campaña 2000/01)
+--   A  T002  30/08/2000  fin No   (campaña 1999/00) + motivos personales + tarea sin parcela
+--   B  T002  01/09/2000  fin No   (campaña 2000/01)
 --   C  T001  02/09/2000  fin No   (mismo día que D, otro operario)
---   D  T003  02/09/2000  fin Sí   → cierra la vuelta 1 de 2000/01 (B, C y D)
---   E  T003  03/09/2000  fin No   → empieza la vuelta 2
---   F  T003  05/09/2000  fin Sí   RECHAZADO: no cuenta en las vueltas y al archivar se borra sin pasar al archivo
+--   D  T002  02/09/2000  fin Sí   → cierra la vuelta 1 de 2000/01 (B, C y D)
+--   E  T002  03/09/2000  fin No   → empieza la vuelta 2
+--   F  T002  05/09/2000  fin Sí   RECHAZADO: no cuenta en las vueltas y al archivar se borra sin pasar al archivo
 -- =====================================================================
 do $$
 declare
-  c_op  text := json_build_object('sub','70115d53-c9a8-40eb-9935-c63d57f12171','email','campo@escribanosl.es','role','authenticated')::text;
+  c_op  text := json_build_object('sub','aaff42de-8ed8-41d6-93e2-edfbde4cfe5d','email','jangel@escribanosl.es','role','authenticated')::text;
   c_sup text := json_build_object('sub','788e6168-2bf6-4320-9a01-701e8d942541','email','oficinas@escribanosl.es','role','authenticated')::text;
   c_adm text := json_build_object('sub','e9ca9b2d-8204-4189-a59f-1202e341f8db','email','soporte@escribanosl.es','role','authenticated')::text;
   res jsonb := '[]';
@@ -82,7 +82,7 @@ begin
                       ||' h='||horas||' reg='||registros, ' | ' order by campana, num_vuelta)
       into antes
     from vueltas where parcela = p1 and tarea = t1 and campana in ('1999/00', '2000/01');
-    reset role; res := res || to_jsonb('R02 vueltas antes de archivar (esperado 1999/00#1 Abierta fin=- por=- h=1.50 reg=1 | 2000/01#1 Cerrada fin=2000-09-02 por=T003 h=4.50 reg=3 | 2000/01#2 Abierta fin=- por=- h=1.50 reg=1): '||coalesce(antes,'(vacío)'));
+    reset role; res := res || to_jsonb('R02 vueltas antes de archivar (esperado 1999/00#1 Abierta fin=- por=- h=1.50 reg=1 | 2000/01#1 Cerrada fin=2000-09-02 por=T002 h=4.50 reg=3 | 2000/01#2 Abierta fin=- por=- h=1.50 reg=1): '||coalesce(antes,'(vacío)'));
   exception when others then res := res || to_jsonb('R02 (esperado OK): ERROR '||sqlstate||' '||sqlerrm); end;
 
   begin
@@ -183,7 +183,7 @@ begin
   begin
     perform set_config('request.jwt.claims',c_adm,true); set local role authenticated;
     insert into tareas_realizadas (id_archivo, campana, operario, fec_tarea, tarea, nom_tarea, horas, num_parte)
-    select id, '2000/01', 'T003', '2000-09-10', t1, 'x', 1, 0 from archivos_partes limit 1;
+    select id, '2000/01', 'T002', '2000-09-10', t1, 'x', 1, 0 from archivos_partes limit 1;
     reset role; res := res || to_jsonb('R14 el admin escribe en el archivo directamente (esperado bloqueado): FALLO, se permitió'::text);
   exception when others then res := res || to_jsonb('R14 escritura directa en el archivo: bloqueado '||sqlstate||' '||sqlerrm); end;
 
