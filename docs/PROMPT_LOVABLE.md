@@ -4,7 +4,7 @@ Cómo usarlo:
 - Pega el **Bloque 0** en el *Knowledge* del proyecto de Lovable (o como primer mensaje). Los demás bloques, uno por
   mensaje y en orden, comprobando cada pantalla antes de pasar a la siguiente.
 - Si Lovable se desvía, responde con el apartado correspondiente de "Lo que NO hay que hacer".
-- Fuente: base de datos real (migraciones 001–019), `app/js/rules.js`, `app/js/data/supabase.js` y el boceto `app/`.
+- Fuente: base de datos real (migraciones 001–021), `app/js/rules.js`, `app/js/data/supabase.js` y el boceto `app/`.
 
 ---
 
@@ -23,6 +23,13 @@ BACKEND YA HECHO (no lo cambies):
   "generar-pdf". NO crees tablas, columnas, migraciones, políticas RLS, funciones ni Edge Functions.
   NO uses datos de ejemplo inventados: lee siempre de Supabase.
 - Conéctate con la URL del proyecto y la clave PUBLISHABLE (anon). Nunca uses la service_role.
+- SIN SESIÓN NO SE LEE NADA: no consultes tablas ni llames a rpc antes de iniciar sesión (la BD responde
+  42501). Si con la sesión ya iniciada una petición devuelve 401 o 42501 porque la sesión caducó, vuelve
+  al login.
+- Con sesión, la app solo LEE las tablas, salvo estas escrituras directas (las políticas deciden quién):
+  catálogos (fincas, parcelas, tareas, vehiculos, aperos) y operarios, y configuracion (solo ADMIN).
+  Todo lo demás (partes_cab, partes_det, auditoria, partes_pdf, archivos_partes, tareas_realizadas
+  y las vistas) es de solo lectura: un insert/update/delete directo da 42501.
 - La base de datos es quien decide: valida todo otra vez y devuelve mensajes en español. La validación en
   pantalla es solo una ayuda.
 - Escrituras de partes SOLO mediante RPC. Nunca insert/update/delete directo en partes_cab ni partes_det
@@ -133,11 +140,21 @@ NAVEGACIÓN (barra inferior en móvil, lateral en escritorio). Arriba: nombre de
 RUTAS: /login, /inicio, /partes, /partes/nuevo, /partes/:id, /partes/:id/editar (?tab=lineas abre la
 segunda pestaña), /archivo.
 
-INICIO
-- Contadores por estado (Pendiente, Cerrado, Aprobado, Rechazado) de los partes que ve el usuario.
+INICIO: todos los datos salen de UNA llamada, rpc('panel_resumen') -> JSON. No los calcules en pantalla.
+- Para todos: rol, cod_ope, hoy, partes_por_estado {Pendiente: n, ...} (de los partes que ve el usuario),
+  mi_parte_hoy {id_parte, num_parte, estado} o null, ultimos_partes (5: id_parte, num_parte, operario,
+  fecha, estado, tot_horas, comentario_supervisor).
+- Solo ADMIN y SUPERVISOR: pendientes_revision (Cerrados), sin_cerrar (Pendientes), partes_hoy,
+  horas_semana (suma de tot_horas de LUNES A DOMINGO de la semana actual), horas_semana_por_finca
+  [{finca, nombre, horas}] (horas de las líneas de esa misma semana), operarios_sin_parte_hoy
+  [{cod_ope, usuario}], maestros_activos {fincas, parcelas, tareas, vehiculos, aperos}.
+- Solo ADMIN: usuarios {activos, inactivos, sin_cuenta_login}.
+Qué mostrar:
+- Contadores por estado (Pendiente, Cerrado, Aprobado, Rechazado).
 - OPERARIO: aviso de sus partes sin cerrar (Pendientes) y de los Rechazados; atajo "Parte de hoy"
-  (abre el de hoy o crea uno nuevo).
-- ADMIN y SUPERVISOR: aviso "N partes cerrados por revisar".
+  (abre mi_parte_hoy o crea uno nuevo).
+- ADMIN y SUPERVISOR: aviso "N partes cerrados por revisar", "Horas esta semana", "Horas por finca esta
+  semana", "Sin parte hoy" (con "Crear parte" para ese operario) y los maestros activos.
 - Últimos 5 partes.
 
 LISTA DE PARTES
@@ -361,6 +378,7 @@ Corrige estas pantallas. No toques el resto ni el backend.
    - Valores propuestos: primera línea = DESPLAZAMIENTO con inicio a la hora de entrada; siguientes =
      inicio en el fin de la última línea y la misma finca, vehículo y apero que la última línea con finca.
    - En la lista de tareas muestra "nombre (tipo)".
+```
 
 ---
 
@@ -399,6 +417,7 @@ La app ya funciona bien en lo principal. Corrige solo estos detalles; no cambies
 
 5. DETALLE DEL PARTE: cambia el botón "Editar" por dos: "Editar jornada" (abre /editar) y "Editar líneas"
    (abre /editar?tab=lineas). Añade la columna Obs. de cada línea si tiene texto.
+```
 
 ---
 
@@ -462,3 +481,11 @@ Dos detalles más:
 ## Estado (10/11/2026, tras publicar C2–C4)
 Revisado en appreport.lovable.app como ADMIN y en vista móvil (360 px): C1, C2, C3 y C4 aplicados.
 Pendiente menor: la pestaña "PDF de partes" del Archivo no tiene filtro desde/hasta (lista todos).
+
+## Cambios del backend del 11 y 12/11/2026 (020 y 021): no hace falta mensaje a Lovable
+- **020 · Permisos mínimos**: sin sesión no se lee nada, y una escritura directa no permitida da 42501 en lugar de
+  0 filas. Añadido al Bloque 0. La app publicada ya solo escribe con rpc, y se probó el 11/11 como operario y como
+  supervisor sin errores.
+- **021 · Horas de la semana**: `panel_resumen` cuenta `horas_semana` y `horas_semana_por_finca` de lunes a domingo.
+  Antes sumaba también las semanas siguientes (717 h en lugar de 199,5). El panel de Inicio de Lovable lee esos
+  valores de la rpc, así que se corrige solo. Bloque 2 documentado con todas las claves de `panel_resumen`.
