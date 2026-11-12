@@ -1,0 +1,117 @@
+Quiero analizar cambios para la funcionalidad de la base de datos y la aplicación. Esta es únicamente una fase de diagnóstico y planificación: no implementes nada todavía.
+
+## 1. Revisión inicial
+
+Inspecciona el proyecto existente, incluidas las tablas y relaciones disponibles, migraciones, políticas RLS, funciones, triggers, tipos y código de la aplicación relacionado con partes de trabajo.
+
+No inventes tablas, campos, relaciones, estados ni comportamientos. Distingue entre lo que está confirmado en el código o el esquema y lo que solo parece probable.
+
+No muestres el contenido de archivos `.env`, secretos, claves ni credenciales.
+
+Para cada elemento confirmado, indica su ubicación o nombre identificable —por ejemplo, tabla y columna, política, función, trigger o archivo— y explica brevemente qué evidencia encontraste. Si no pudiste verificar algo, indícalo expresamente; no lo presentes como confirmado. No muestres valores de secretos ni contenido de archivos .env.
+
+## 2. Necesidades propuestas
+
+### A. Estructura de los partes y sus tareas
+
+**A1. Campos de finca y vehículo**
+
+Se han quitado de `partes_cab` los campos de finca y vehículo. Verifica el estado real del esquema y del código.
+
+Cuando `mat_nave` sea falso, la primera línea de `partes_det` debe ser una tarea de tipo **DESPLAZAMIENTO**. En esa tarea deben ser obligatorios la finca, el vehículo y los tiempos de inicio y fin.
+
+Analiza cómo se identifica actualmente una tarea de desplazamiento y cómo se representa `mat_nave`. No propongas campos nuevos sin indicar que serían necesarios y esperar mi aprobación.
+
+Determina cómo se define actualmente el orden de las líneas y cómo se identifica la primera. Si no hay un criterio fiable, descríbelo como una limitación y no asumas que el orden de creación equivale al orden de las tareas.
+
+**A2. Total de horas de las tareas**
+
+Se propone añadir `ht_tareas` a `partes_cab`, calculado a partir del tiempo total de las tareas de `partes_det` y expresado en horas.
+
+Evalúa si conviene almacenarlo en la base de datos o calcularlo al consultar. Explica cómo se mantendría actualizado y cómo se evitarían discrepancias entre el total y sus tareas. No elijas ni implementes una solución todavía.
+
+**A3. Parámetros de configuración**
+
+Evalúa crear una tabla de configuración para almacenar parámetros como `th_jornada` (horas de jornada estipuladas) y otros parámetros que pudieran confirmarse durante el análisis.
+
+La tabla, si se propone, debería estar accesible únicamente para el rol Admin. Analiza cómo se aplicaría esta restricción mediante RLS y cómo se distinguiría el rol Admin de forma segura según la arquitectura actual. No crees la tabla ni presupongas qué otros parámetros debe contener.
+
+### B. Reglas de tiempos y continuidad entre tareas
+
+**B1. Límites de la jornada**
+
+En partes_det, h_ini no puede ser anterior a la hora de entrada del parte y h_fin no puede ser posterior a la hora de salida del parte. Verifica cómo se representa actualmente la entrada y salida del parte y cómo se relacionan esos valores con h_ini y h_fin. Si h_ini y h_fin son los únicos campos disponibles para definir esos límites, señálalo: la regla podría referirse entonces a las horas de inicio y fin de cada tarea. No presupongas que existe una hora de entrada o salida independiente del parte.
+
+**B2. Cambio de finca**
+
+Debe mantenerse la finca de una tarea a la siguiente. No se podrá cambiar a otra finca hasta haber creado una tarea de tipo DESPLAZAMIENTO hacia esa finca.
+
+Explica cómo se determinaría la finca de origen y destino con el esquema actual y qué validaciones hacen falta. Si el esquema no permite representar este flujo, describe la limitación sin añadir campos por tu cuenta.
+
+**B3. Vehículo y apero**
+
+Se propone que, al crear cada línea del parte, el vehículo y el apero aparezcan inicialmente con los valores de la tarea anterior. El operario debe poder cambiarlos.
+
+Comprueba si existen actualmente esos campos en `partes_det` y cómo se identifica el orden de las tareas. Distingue este valor inicial de una regla que obligue a conservarlo.
+
+**B4. Continuidad horaria**
+
+El inicio de una tarea puede proponerse con el valor de fin de la tarea anterior. No se deben permitir tareas superpuestas: el inicio de una tarea no puede ser anterior al fin de la tarea precedente.
+
+Analiza cómo se ordenan actualmente las líneas y cómo se comporta una tarea si se edita o elimina una tarea anterior. No asumas que el orden de creación coincide con el orden cronológico.
+
+**B5. Intervalos de 15 minutos**
+
+En la tabla partes_det, los campos h_ini y h_fin deben permitir únicamente horas cuyos minutos sean 00, 15, 30 o 45 (por ejemplo: 10:00, 10:15, 10:30, 10:45). Esta regla se aplica a ambos campos y a todas las horas válidas.
+Comprueba los tipos de datos actuales y cómo se introducen y guardan estas horas. Analiza cómo validar la regla en la interfaz y en Supabase para que no pueda eludirse enviando valores directamente. No redondees ni modifiques datos existentes; informa de cualquier incompatibilidad y espera aprobación antes de proponer o aplicar cambios.
+
+### C. Estado y permisos del parte
+
+**C1. Estado CERRADO**
+
+Se propone utilizar el estado CERRADO. Mientras el parte no esté cerrado, el Operario puede modificarlo. El parte puede cerrarlo un Operario, Supervisor o Admin. Una vez cerrado, no se puede reabrir por ningún rol.
+
+Verifica los estados y permisos existentes en la aplicación y en Supabase (incluidas las políticas RLS). Analiza cómo impedir de forma segura que cualquier rol modifique un parte cerrado, tanto desde la interfaz como mediante solicitudes directas a la base de datos. Comprueba también si los usuarios pueden consultar los partes cerrados y qué permisos de modificación conservan actualmente Supervisor y Admin en los partes abiertos; no alteres esos permisos por suposición.
+
+No implementes cambios. Indica las discrepancias entre la interfaz y las políticas de Supabase, y espera aprobación antes de modificar código, esquema o políticas.
+
+### D. Cálculo de horas extra
+
+**D1. Campo `h_ext`**
+
+Se propone calcular `h_ext` a partir de `tot_horas - th_jornada`. Se indica que `th_jornada` todavía no existe y podría formar parte de la configuración descrita en A3.
+
+Verifica si `h_ext` y `tot_horas` existen actualmente, cómo se calcula `tot_horas` y qué unidad utiliza cada campo. Explica qué ocurriría si el resultado fuese negativo y si las horas extra deberían calcularse por parte, día u otro periodo. No presupongas la respuesta ni añadas campos.
+
+Calcular h_ext como tot_horas - th_jornada. Si el resultado es negativo, asignar 0; nunca permitir que h_ext tenga un valor negativo. Verifica dónde se realiza actualmente el cálculo y cómo garantizar la regla también en el servidor o la base de datos, no solo en la interfaz. No implementes cambios sin aprobación.
+
+## 3. Formato del diagnóstico
+
+Para cada necesidad, presenta:
+
+1. El comportamiento esperado, expresado claramente.
+2. Los elementos existentes que has podido confirmar.
+3. Lo que falta o no se puede confirmar.
+4. Si requeriría cambios en la aplicación, la base de datos o ambos.
+5. Los roles implicados y los controles necesarios en la interfaz y en Supabase.
+6. Riesgos, dependencias y decisiones pendientes.
+7. Pruebas que permitirían comprobar que funciona correctamente.
+
+Separa explícitamente:
+- cambios posibles sin modificar el esquema;
+- cambios que requieren modificar el esquema o las políticas de Supabase;
+- decisiones funcionales que necesito confirmar.
+
+## 4. Preguntas y plan
+
+Al final:
+
+1. Enumera las preguntas concretas que necesito responder para resolver las ambigüedades.
+2. Propón un orden de implementación por módulos, con dependencias y pruebas.
+3. Indica qué requisitos deberían resolverse antes de diseñar migraciones o políticas RLS.
+
+## 5. Límites de esta fase
+
+No escribas ni modifiques código. No ejecutes SQL. No apliques migraciones ni cambies tablas, datos, políticas RLS, funciones o triggers. No hagas cambios en Supabase.
+
+Cuando termines el diagnóstico, las preguntas y el plan, detente y espera mi aprobación. Para cualquier cambio posterior de base de datos, presenta primero el SQL propuesto y su impacto para que yo pueda revisarlos antes de autorizar su aplicación.
