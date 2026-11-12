@@ -480,7 +480,38 @@ Dos detalles más:
 
 ## Estado (10/11/2026, tras publicar C2–C4)
 Revisado en appreport.lovable.app como ADMIN y en vista móvil (360 px): C1, C2, C3 y C4 aplicados.
-Pendiente menor: la pestaña "PDF de partes" del Archivo no tiene filtro desde/hasta (lista todos).
+Pendiente menor: la pestaña "PDF de partes" del Archivo no tiene filtro desde/hasta (lista todos). Se corrige con el
+Bloque C5, aplicado en Lovable el 12/11/2026.
+
+---
+
+## Bloque C5 · Filtro por fechas en "PDF de partes" (12/11/2026)
+
+Pegar como mensaje en el chat de Lovable.
+
+```
+Solo un cambio, en Archivo → "PDF de partes". No toques nada más.
+
+Ahora la lista muestra todos los PDF. Añade arriba un filtro por la FECHA DEL PARTE:
+- Dos campos de fecha, "Desde" y "Hasta" (dd/mm/aaaa), los dos opcionales, y un botón "Buscar".
+  Vacíos = sin límite por ese lado. Si "Desde" es posterior a "Hasta", avisa y no busques.
+- Consulta (pagina con .range() de 1000 en 1000 hasta traer todas las filas):
+    let q = supabase.from('partes_pdf')
+      .select('id_parte, num_parte, fecha, operario, version, ruta, generado')
+      .eq('estado', 'Generado')
+      .order('fecha', { ascending: false })
+      .order('num_parte', { ascending: false })
+      .order('version', { ascending: false });
+    if (desde) q = q.gte('fecha', desde);   // 'AAAA-MM-DD'
+    if (hasta) q = q.lte('fecha', hasta);
+  Después deja solo la PRIMERA fila de cada id_parte (la última versión).
+- Encima de la tabla: "N parte(s) con PDF". Columnas: Nº parte, Fecha, Operario (nombre con
+  rpc('operarios_nombres')), Versión (v1, v2...), Generado (dd/mm/aaaa HH:MM) y botón "Abrir"
+  (storage.from('partes-pdf').createSignedUrl(ruta, 300), en una pestaña nueva).
+- Sin resultados: "No hay PDF generados en esas fechas." Error: mensaje y "Reintentar".
+- Incluye los partes ya archivados (siguen en partes_pdf aunque el parte se haya borrado).
+- En móvil, cada PDF es una tarjeta (nº y fecha, operario, versión, botón Abrir).
+```
 
 ## Cambios del backend del 11 y 12/11/2026 (020 y 021): no hace falta mensaje a Lovable
 - **020 · Permisos mínimos**: sin sesión no se lee nada, y una escritura directa no permitida da 42501 en lugar de
