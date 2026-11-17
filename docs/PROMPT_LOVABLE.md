@@ -513,6 +513,314 @@ Ahora la lista muestra todos los PDF. Añade arriba un filtro por la FECHA DEL P
 - En móvil, cada PDF es una tarjeta (nº y fecha, operario, versión, botón Abrir).
 ```
 
+---
+
+## Bloque C6 · Ajustes de "PDF de partes" tras probarlo como supervisora (16/11/2026)
+
+Probado con T001 en appreport.lovable.app. Funciona: el filtro va a la BD (`fecha=gte/lte`), sin fechas salen los
+4 partes con PDF, "hasta 06/11" → 441, "07/11–30/11" → 510 v2, "desde 01/12" → 595 y 596, "desde 01/01/2027" →
+"Sin PDFs"; "Abrir" abre el PDF firmado (5 min) en una pestaña nueva; sin errores en la consola. Falla lo de abajo.
+
+```
+Solo estos ajustes, en Archivo → "PDF de partes" (y la barra de pestañas de Archivo). No toques nada más.
+
+1. DESDE POSTERIOR A HASTA: ahora sale "Sin PDFs" como si no hubiera resultados. Muestra un aviso
+   "La fecha Desde no puede ser posterior a Hasta" y no lances la consulta.
+
+2. NO BUSQUES MIENTRAS SE ESCRIBE LA FECHA: ahora se lanza una consulta por cada tecla (al teclear el año
+   pide 0002, 0020, 0202 y 2026). Busca solo cuando la fecha esté completa y sea válida (año de 4 cifras,
+   entre 2020 y 2100), o al pulsar un botón "Buscar"; además, espera 400 ms desde el último cambio.
+
+3. MÓVIL (360 px):
+   - La barra de pestañas de Archivo (Archivos · Tareas realizadas · Horas por trabajador · PDF de partes)
+     no cabe: "PDF de partes" queda fuera de la pantalla y no se puede pulsar, y toda la página se desplaza
+     en horizontal. Haz que la barra se desplace sola dentro de su ancho (overflow-x: auto, sin que se mueva
+     la página) o que pase a dos líneas.
+   - La lista de PDF sigue siendo una tabla y "Abrir" queda fuera de la pantalla. Por debajo de 768 px
+     muestra cada PDF como una tarjeta: "Parte nº 510 · 10/11/2026", operario, "Versión 2 · generado
+     10/11/2026 23:23" y el botón "Abrir" a todo el ancho.
+   - Ninguna pantalla debe desplazarse en horizontal a 360 px.
+```
+
+**C6 aplicado y comprobado el 16/11/2026** (versión publicada `index-D1UVxCN5.js`, como T001). Funciona:
+- botón "Buscar" y una sola consulta con la fecha completa;
+- aviso "La fecha Desde no puede ser posterior a Hasta", sin lanzar la consulta;
+- resultados correctos con "hasta 06/11" → 441 y con "07/11–30/11" → 510 v2;
+- en el móvil (360 px):
+  - la página mide 360 px;
+  - la barra de pestañas se desplaza dentro de su ancho;
+  - la lista sale en tarjetas, con "Abrir" a todo el ancho.
+
+Detalles menores pendientes (no urgentes):
+- El botón "Abrir" mide 32 px de alto; lo recomendado son 44 px.
+- El icono de calendario de los campos de fecha queda un poco cortado a 360 px.
+- Los campos de fecha no tienen nombre accesible: el lector de pantalla dice "Día", no "Desde, día".
+- Al cargar la pestaña "Archivos" sale un momento "Todavía no se ha archivado nada" junto a "Cargando…".
+
+Los cuatro se incluyen en el Bloque C7.
+
+---
+
+## Bloque C7 · El operario usa la app SOLO desde el móvil (revisión del 16/11/2026)
+
+Revisado como el operario T002 (jangel) en un móvil de 360 × 780 px. Pantallas: Panel, Partes, detalle, Nuevo parte
+(Jornada) y Líneas del parte. Para ver el editor de líneas se creó el parte de prueba nº 623 (21/11/2026), que se
+borró después como ADMIN.
+
+Ya funciona bien:
+- detalle del parte en tarjetas;
+- cambio automático a "Líneas del parte" al aceptar la jornada;
+- un solo editor de línea abierto a la vez;
+- valores propuestos (inicio, finca y vehículo de la línea anterior);
+- la lista de "Fin" solo ofrece horas entre el inicio y la salida;
+- la parcela se filtra por la finca;
+- "Fin de vuelta" aparece solo cuando hay parcela;
+- el error de la BD sale en rojo encima de "Aceptar" sin perder lo escrito.
+
+Medidas (objetivo: nada de desplazamiento lateral y todo lo que se pulsa con al menos 44 px de alto):
+- **Ancho de la página:**
+  - Panel: 408 px.
+  - Editor de línea: 366 px, y 481 px con una tarea de nombre largo.
+  - Lista de partes: una tabla de 578 px.
+- **Alto de lo que se pulsa:**
+  - Menú: 28 × 28 px.
+  - Campos, selectores, "Aceptar", "Cancelar" y "Nuevo parte": 36 px.
+  - "Editar" y "Quitar": 32 px.
+  - Botones de estado: 31 px.
+  - "Sí", "No" y "Sin responder" del fin de vuelta: 28 px.
+  - Opciones de las listas: 32 px.
+- **Letra:** el buscador de las listas tiene 14 px, así que el iPhone amplía la pantalla al tocarlo.
+
+```
+El usuario OPERARIO usa la app EXCLUSIVAMENTE desde el MÓVIL (360–430 px de ancho, en el campo, a veces
+con guantes y al sol). Optimiza para él estas pantallas. No cambies la lógica ni las llamadas a Supabase,
+y deja la vista de escritorio de ADMIN y SUPERVISOR como está.
+
+REGLAS GENERALES EN MÓVIL (< 768 px)
+- Ninguna pantalla se desplaza en horizontal: comprueba a 360 px que el ancho de la página es 360. Usa
+  min-w-0 y truncado en flex/grid, y que los textos largos (nombres de tarea, vehículo, apero) hagan salto
+  de línea en vez de ensanchar la caja.
+- Todo lo que se pulsa mide al menos 44 px de alto: botones, campos, selectores, opciones de las listas,
+  pestañas, "Editar", "Quitar", "Sí / No / Sin responder", el menú y los enlaces.
+- Letra de 16 px en todos los campos y en los buscadores de las listas (con menos, el iPhone hace zoom al
+  tocarlos). Texto mínimo de 14 px; nada en 12 px salvo etiquetas secundarias.
+- Las acciones principales siempre a mano: barra fija abajo con el botón principal de cada pantalla,
+  respetando la zona segura del iPhone (padding-bottom: env(safe-area-inset-bottom)).
+- Oculta en móvil la insignia "Edit with Lovable" si se puede: tapa botones y textos.
+
+1. NAVEGACIÓN DEL OPERARIO: cambia el menú lateral (botón de 28 px arriba a la izquierda) por una BARRA
+   INFERIOR FIJA con 3 botones grandes, con icono y texto: "Inicio", "Mis partes" y "Parte de hoy". "Parte
+   de hoy" abre el parte de hoy si existe y, si no, el formulario nuevo. Arriba deja solo el título de la
+   pantalla, y "Salir" dentro de un menú de usuario. Quita del menú los textos en inglés ("Sidebar",
+   "Displays the mobile sidebar", "Toggle Sidebar"): ponlos en español.
+
+2. INICIO (panel):
+   - La lista "Últimos partes" se sale de la pantalla (408 px). En móvil, cada parte es una tarjeta: "Nº 533 ·
+     04/12/2026" y la etiqueta de estado. Sin la columna de operario: es el propio usuario.
+   - El aviso grande "Tu parte de hoy" primero, con su botón a todo el ancho (48 px de alto). Si no hay parte
+     hoy, el botón dice "Empezar el parte de hoy".
+   - "Partes por estado": botones de 44 px, que llevan a la lista filtrada (ya lo hacen).
+
+3. MIS PARTES (lista):
+   - Ahora es una tabla de 8 columnas (578 px) con desplazamiento lateral; el estado no se ve. En móvil,
+     una TARJETA por parte, toda ella pulsable (un enlace, no una fila con onclick):
+       línea 1: "Nº 533 · jue 04/12/2026" y la etiqueta de estado a la derecha
+       línea 2: 07:30–18:00 · 8,50 h (y "+1,00 h extra" si hay)
+       línea 3: fincas
+     Sin columna "Operario".
+   - Los filtros ocupan media pantalla antes de la lista. En móvil, deja visibles solo los botones de estado
+     (en una fila que se desplaza de lado dentro de su ancho, de 44 px de alto) y mete Nº de parte, Finca,
+     Desde y Hasta en un botón "Filtros" que abre un panel desde abajo. Muestra cuántos filtros hay activos.
+   - "Nuevo parte" pasa a la barra inferior ("Parte de hoy"); quita el botón de arriba en móvil.
+
+4. NUEVO PARTE · JORNADA:
+   - Quita el campo "Operario" para el operario (el parte es suyo; ahora sale desactivado).
+   - Si ya tiene parte en la fecha elegida, avisa antes de aceptar: "Ya tienes el parte nº X de ese día" con
+     un botón "Abrir ese parte" (ahora propone hoy aunque ya exista y la BD lo rechaza al aceptar).
+   - Entrada y Salida en la misma fila (2 columnas); Almuerzo y Comida en la misma fila.
+   - Las listas de hora tienen 96 opciones (00:00–23:45) de 32 px. Ofrece solo de 05:00 a 22:00, con
+     opciones de 44 px, y al abrir colócate en la hora elegida. Mejor aún: usa en móvil el selector nativo
+     (<select>), que en el teléfono se ve como una rueda.
+   - "Aceptar jornada" en la barra fija de abajo, a todo el ancho.
+   - El resumen (Total jornada, horas…) plegado bajo el formulario: muestra solo "Total 8,50 h · Sin asignar
+     8,00 h" y despliega el resto al tocarlo.
+
+5. LÍNEAS DEL PARTE (lo más importante: el operario lo usa varias veces al día):
+   - El editor se sale de su recuadro: los campos miden más que la tarjeta (página de 366 px, y 481 px con un
+     nombre de tarea largo). Los campos deben medir el 100 % del ancho de la tarjeta y el texto del valor
+     elegido debe partirse en dos líneas o cortarse con "…", nunca ensanchar la caja.
+   - Abre el editor de línea a PANTALLA COMPLETA en móvil (una hoja que sube desde abajo, con el título "Nueva
+     línea" o "Editar línea" y una X para cerrar), con "Cancelar" y "Aceptar" FIJOS ABAJO. Ahora "Aceptar"
+     queda a 1100 px y hay que desplazarse para encontrarlo.
+   - Lista de TAREAS (95, sin agrupar): en móvil los nombres se cortan y no se distingue "*LABRAR CON DISCOS
+     POR HAS" de "...POR HORAS". Muestra el nombre completo en dos líneas y el tipo debajo, en pequeño.
+     Agrupa por tipo (Desplazamiento, Mantenimiento, Por superficie, Por horas, Motivos personales) y pon
+     arriba un grupo "Recientes" con las 5 últimas tareas que ha usado el operario.
+   - Lo mismo para Finca, Parcela, Vehículo y Apero: opciones de 44 px, buscador de 16 px, y "Recientes"
+     arriba en Vehículo y Apero. Ábrelas como hoja desde abajo en vez de como desplegable pegado al campo.
+   - "Fin de vuelta": los tres botones (Sí / No / Sin responder) a 44 px de alto.
+   - En cada línea guardada, "Editar" y "Quitar" de 44 px. "Quitar" en rojo, con confirmación.
+   - No repitas el tipo cuando coincide con el nombre: "DESPLAZAMIENTO (DESPLAZAMIENTO)" → "DESPLAZAMIENTO".
+
+6. DETALLE DEL PARTE:
+   - "Cerrar parte", "Editar jornada" y "Editar líneas" en la barra fija de abajo cuando se pueden usar.
+     "Cerrar parte" es el principal, a todo el ancho.
+   - "Seguimiento": muestra siempre el NOMBRE de la persona (ahora mezcla correo, nombre y el código "T001").
+
+7. ARCHIVO → PDF DE PARTES (supervisor, detalles pendientes del C6):
+   - Botón "Abrir" a 44 px (ahora 32).
+   - El icono de calendario de los campos de fecha se corta a 360 px.
+   - Los campos de fecha no tienen nombre accesible: el lector dice "Día", no "Desde, día". Asocia la
+     etiqueta (label for/id o aria-label="Desde").
+   - Al cargar la pestaña "Archivos" sale un momento "Todavía no se ha archivado nada" junto a "Cargando…":
+     mientras carga, muestra solo "Cargando…".
+
+COMPRUEBA ANTES DE DARLO POR TERMINADO, a 360 × 780 px y como OPERARIO:
+- Ninguna pantalla se desplaza de lado (ancho de la página = 360).
+- Todo lo que se pulsa mide 44 px o más.
+- Se puede crear el parte de un día libre, añadir un DESPLAZAMIENTO y una tarea con parcela respondiendo el
+  fin de vuelta, y cerrar el parte, sin hacer zoom ni desplazarse de lado.
+- "Aceptar" está siempre visible sin desplazarse.
+```
+
+**C7 aplicado y comprobado el 16/11/2026** (versión `index-BP-Jivqa.js`, como T002, a 360 × 780 px; parte de prueba
+nº 624 del 21/11, borrado después como ADMIN).
+
+Funciona:
+- **Navegación:** barra inferior fija (Inicio · Mis partes · Parte de hoy, de 56 px) y menú de usuario de 44 px. La
+  insignia de Lovable ya no se ve.
+- **Ancho:** todas las pantallas miden 360 px.
+- **Panel y lista de partes:** van en tarjetas; la lista tiene el botón "Filtros".
+- **Pestaña Jornada:**
+  - sin campo "Operario";
+  - aviso "Ya tienes el parte nº 519 de ese día" con "Abrir ese parte", y "Aceptar jornada" desactivado;
+  - horas en listas nativas de 05:00 a 22:00, de dos en dos por fila;
+  - "Aceptar jornada" fijo abajo y el resumen plegado.
+- **Editor de líneas:**
+  - a pantalla completa, con "Cancelar" y "Aceptar" fijos abajo (48 px);
+  - listas en hoja desde abajo, con opciones de 44 px y buscador de 16 px;
+  - tareas agrupadas por tipo, con "Recientes" y el nombre completo;
+  - "Recientes" también en Vehículo;
+  - fin de vuelta con botones de 48 px.
+- **Líneas guardadas y detalle:** "Editar" y "Quitar" de 44 px; "Cerrar parte" fijo abajo; el tipo ya no se repite.
+
+Falta lo del Bloque C8. No se volvieron a comprobar los detalles de "PDF de partes" del punto 7, porque son de la vista
+del supervisor.
+
+---
+
+## Bloque C8 · Últimos ajustes del móvil del operario (16/11/2026)
+
+```
+Últimos ajustes en la vista móvil del OPERARIO. No toques nada más.
+
+1. PARTE DE OTRO DÍA: en móvil el botón "Nuevo parte" de "Mis partes" está oculto y "Parte de hoy" solo crea
+   el de hoy. Si el operario ya tiene el parte de hoy, no puede dar de alta el de un día que se le olvidó.
+   Añade en "Mis partes" (móvil) un botón "+ Parte de otro día" a todo el ancho, encima de la lista, que abra
+   /partes/nuevo. El formulario ya avisa si ese día tiene parte.
+
+2. FECHA CORTADA EN LAS TARJETAS DE "MIS PARTES": "Nº 533 · vie 04/1…" se corta, porque necesita 221 px y
+   tiene 180, ya que comparte línea con la etiqueta de estado. Pon la etiqueta de estado en su propia línea
+   o debajo, o la fecha en una segunda línea. La fecha completa debe verse siempre.
+
+3. ERROR TAPADO EN EL EDITOR DE LÍNEA: el mensaje de error de la BD queda detrás de la barra fija de
+   "Cancelar / Aceptar" y solo se ve su primera línea. Cuando llegue un error, muéstralo ENCIMA de la barra
+   fija (dentro de ella o justo antes, siempre visible), o desplaza el contenido hasta que se vea entero.
+
+4. BOTONES "X" PARA QUITAR la finca, el vehículo, etc. dentro de los campos: miden 36 × 36 px; ponlos a 44 × 44.
+
+5. PANEL: el enlace "Ver todos" de "Últimos partes" mide 20 px de alto; ponlo a 44 px (o toda la cabecera de
+   la tarjeta pulsable).
+
+6. ESPACIO DE LAS BARRAS FIJAS EN EL DETALLE: "Cerrar parte" + "Editar jornada/Editar líneas" + la barra
+   inferior ocupan 172 px de 780. Pon "Editar jornada" y "Editar líneas" en la misma fila que "Cerrar
+   parte" (iconos con texto corto) o dentro de un botón "Editar ▾", para dejar una sola fila de acciones
+   encima de la barra inferior.
+```
+
+**C8 aplicado y comprobado el 16/11/2026** (versión `index-CpGfvH9K.js`, como T002, a 360 × 780 px; parte de prueba
+nº 625 del 21/11, borrado después como ADMIN). Los seis puntos funcionan:
+1. "Parte de otro día" (44 px) en "Mis partes" abre el formulario nuevo.
+2. La fecha completa se ve en las tarjetas ("Nº 533 · vie 04/12/2026").
+3. El error de la BD se ve entero encima de "Cancelar / Aceptar".
+4. Las "X" para quitar miden 44 × 44.
+5. "Ver todos" mide 44 px.
+6. El detalle tiene una sola fila de acciones (Jornada · Líneas · Cerrar), y las barras fijas bajan de 172 a 128 px.
+
+Pendientes:
+- No se ha vuelto a comprobar el punto 7 del C7 (PDF de partes, vista del supervisor).
+- Resueltos con la migración 022:
+  - "T001" en "Seguimiento": `operarios_nombres()` devuelve ya al operario los nombres de ADMIN y SUPERVISOR, y la app
+    muestra "maria" sin cambios en Lovable.
+  - La fecha de "Parte de otro día": Bloque C9.
+
+---
+
+## Bloque C9 · "Parte de otro día" propone el último día sin parte (16/11/2026)
+
+La BD ya tiene la función (migración 022). Pegar como mensaje en el chat de Lovable.
+
+```
+Un solo cambio en el formulario de parte nuevo. No toques nada más.
+
+El operario está obligado a hacer TODOS los partes. Cuando el operario abre "Parte de otro día" (o
+/partes/nuevo), la fecha propuesta debe ser el último día laborable que tiene SIN parte, no hoy:
+
+- Al abrir el formulario (solo al crear, no al editar), llama a rpc('ultimo_dia_sin_parte') -> 'AAAA-MM-DD' o null.
+  · Si devuelve una fecha: ponla en el campo Fecha y muestra debajo, en ámbar, "Te falta el parte del
+    vie 13/11/2026" (día de la semana abreviado y fecha dd/mm/aaaa).
+  · Si devuelve null: deja la fecha de hoy y muestra en verde "No tienes partes pendientes".
+  · El usuario puede cambiar la fecha libremente; el aviso "Ya tienes el parte nº X de ese día" sigue igual.
+- ADMIN y SUPERVISOR, al crear para otro operario: cuando elijan el operario, llama a
+  rpc('ultimo_dia_sin_parte', { p_operario: cod_ope }) y haz lo mismo.
+- "Parte de hoy" (barra inferior) no cambia: sigue abriendo el parte de hoy o creándolo.
+- En INICIO, para el OPERARIO: si la función devuelve una fecha anterior a hoy, muestra arriba un aviso ámbar
+  "Te falta el parte del vie 13/11/2026" con el botón "Hacerlo ahora" (44 px), que abre /partes/nuevo.
+```
+
+---
+
+## Bloque C10 · Botones de estado de "Mis partes" sin desplazamiento lateral (17/11/2026)
+
+Medido a 360 px como T002: los 5 botones de estado (Todos 72 px, Pendiente 98, Cerrado 88, Aprobado 98 y Rechazado
+103, más los huecos) necesitan 522 px en una fila de 360. Por eso la fila se desplaza de lado y muestra una barra de
+desplazamiento.
+
+```
+Un solo cambio en "Mis partes", en móvil (< 768 px). No toques nada más.
+
+Los botones de estado (Todos, Pendiente, Cerrado, Aprobado, Rechazado) no caben en una fila: necesitan 522 px y
+la fila se desplaza en horizontal con una barra de desplazamiento. Quita el desplazamiento (nada de
+overflow-x: auto en esa fila) y colócalos en una CUADRÍCULA de 3 columnas iguales y 2 filas, junto con el
+botón "Filtros":
+
+   [ Todos     ] [ Pendiente ] [ Cerrado ]
+   [ Aprobado  ] [ Rechazado ] [ Filtros ]
+
+- grid-cols-3, gap de 8 px, cada botón al 100 % de su columna, alto de 44 px, texto centrado de 14 px sin
+  salto de línea (si no cabe, quita el punto de color antes de cortar el texto).
+- El botón elegido se rellena con su color (como ahora "Todos" en verde) y los demás quedan con borde.
+- "Filtros" pasa a esta cuadrícula, con su icono y el número de filtros activos si los hay ("Filtros · 2").
+  Quítalo de la cabecera de la lista; ahí deja solo "21 partes · 181,50 h".
+- Ninguna barra de desplazamiento horizontal en la pantalla. Comprueba a 360 px que la cuadrícula mide como
+  mucho 328 px de ancho y que la página mide 360.
+- En escritorio deja la fila como está.
+```
+
+**C9 y C10 aplicados y comprobados el 17/11/2026** (versión `index-BtuL6cPY.js`, como T002, a 360 × 780 px).
+
+C10:
+- Cuadrícula de 3 × 2 (Todos · Pendiente · Cerrado / Aprobado · Rechazado · Filtros), con botones de 104 × 44 px.
+- Mide 328 px de ancho y la página 360, sin desplazamiento lateral.
+- Los filtros funcionan: Pendiente → 0, Aprobado y Todos → 21. La cabecera muestra "21 partes · 181,50 h".
+
+C9:
+- La app llama a `rpc('ultimo_dia_sin_parte')`.
+- Sin días pendientes (caso real de T002): propone hoy y muestra "No tienes partes pendientes", sin aviso en Inicio.
+- Con un día pendiente, simulado en el navegador devolviendo 2026-11-13 sin tocar la BD:
+  - "Parte de otro día" propone el 13/11 y muestra "Te falta el parte del vie 13/11/2026".
+  - Inicio muestra el mismo aviso con "Hacerlo ahora" (44 px), que abre /partes/nuevo.
+
 ## Cambios del backend del 11 y 12/11/2026 (020 y 021): no hace falta mensaje a Lovable
 - **020 · Permisos mínimos**: sin sesión no se lee nada, y una escritura directa no permitida da 42501 en lugar de
   0 filas. Añadido al Bloque 0. La app publicada ya solo escribe con rpc, y se probó el 11/11 como operario y como

@@ -31,6 +31,7 @@ Proyecto Supabase: `baluwelboftnibtyjrer` (referenciado en `.mcp.json`).
 | `019_validacion_por_linea.sql` | Aplicada 10/11 con el conector (figura en el historial); verificada 14/14 con `pruebas/pruebas_modulo10.sql` | Módulo 10: guardar por partes. `guardar_cabecera(id, cab)` crea o edita la jornada; `guardar_linea(id, linea)` crea o edita una línea (la nueva empieza cuando acaba la última; la editada sigue entre la anterior y la siguiente); `borrar_linea(id_linea)`. Las tres validan el parte completo con `validar_parte()` y usan los permisos de `guardar_parte()`, que se mantiene |
 | `020_permisos_minimos.sql` | Aplicada 11/11 con el conector (figura en el historial); verificada con `pruebas_modulo10.sql` 14/14, `pruebas_modulo9.sql` 14/14, `pruebas_correcciones_017.sql` 6/6 y prueba sin sesión por la API (todo 42501) | Seguridad: `anon` sin ningún permiso en `public` (tampoco en lo que se cree después); `authenticated` con SELECT en todo, escritura solo en catálogos y `operarios` (lo deciden las políticas) y UPDATE en `configuracion`; sin escritura directa en `partes_cab`, `partes_det` ni las vistas, y sin TRUNCATE. Una escritura directa no permitida da 42501 (antes, 0 filas). Las pruebas usan ahora T002 como operario (T003 pasó a SUPERVISOR) |
 | `021_panel_horas_semana.sql` | Aplicada 12/11 con el conector (figura en el historial); verificada como SUPERVISOR (199,5 h de la semana 09–15/11, antes 717 h; horas por finca iguales a la suma de las líneas de esa semana), el operario sigue sin esas claves y los permisos no cambian | Panel de inicio: `horas_semana` y `horas_semana_por_finca` cuentan solo de lunes a domingo de la semana actual (antes sumaban también las semanas siguientes). En `pruebas_modulo1.sql`, S04 ya no muestra las horas de sus partes de 2099 |
+| `022_nombres_revisores_y_dia_sin_parte.sql` | Aplicada 16/11 con el conector (figura en el historial); verificada 8/8 en un bloque con rollback (N01–N02, D01–D06) y en la app: el "Seguimiento" del operario pasa de "T001" a "maria" | `operarios_nombres()`: el OPERARIO recibe también a los ADMIN y SUPERVISOR (no a los demás operarios). Nueva `ultimo_dia_sin_parte(p_operario)`: el último día laborable (lunes a viernes, hasta hoy) sin parte del operario. Busca desde la fecha más reciente de estas: día siguiente al último archivado, su primer parte o hace 60 días. Sin partes → hoy; sin huecos → null; no tiene en cuenta los festivos. El OPERARIO solo consulta lo suyo |
 
 Decisiones de los módulos 4 a 8 (valores iniciales, supervisor, `fin_vuelta`, archivo de tareas y vueltas, PDF):
 `docs/DECISIONES_MODULOS_4_A_8.md`.
@@ -64,7 +65,7 @@ La tabla describe el comportamiento actual.
 |---|---|---|---|---|
 | Catálogos (`fincas`, `parcelas`, `tareas`, `vehiculos`, `aperos`) | Todo, incluido borrar | Leer, crear, editar, dar de baja | Leer | Nada |
 | `operarios` (usuarios) | Todo, incluido borrar | Solo su ficha | Solo su ficha | Nada |
-| `operarios_nombres()` | Todos | Todos (código y nombre) | El suyo | — |
+| `operarios_nombres()` | Todos | Todos (código y nombre) | El suyo y los de ADMIN y SUPERVISOR (022) | — |
 | `partes_cab` (solo vía funciones desde la 010) | Leer todos; crear para cualquiera; editar en cualquier estado; cerrar; aprobar/rechazar; borrar | Leer todos; crear para cualquier operario activo; corregir Pendientes y Cerrados (013); cerrar cualquiera; aprobar/rechazar Cerrados, también los que creó, salvo los suyos como titular | Crear y leer los suyos; editar y cerrar en Pendiente | Nada |
 | `partes_det` (solo vía `guardar_parte()` desde la 009) | Todo | Leer; escribir las de partes Pendientes y Cerrados (013) | Los de sus partes en Pendiente | Nada |
 | `auditoria` | Leer | Leer (sin `operarios` ni `configuracion`) | Nada | Nada |
@@ -97,6 +98,8 @@ Reglas que impone la BD (no solo la interfaz):
 - **Usuario conectado**: `select * from operarios` devuelve solo su ficha (ADMIN: todas; filtrar por `user_id = auth.uid()`).
   Rol: `rpc('app_rol')`; código: `rpc('app_cod_ope')`.
 - **Nombres de operarios** (listas, partes): `rpc('operarios_nombres')` → `cod_ope, usuario, activo`.
+- **Fecha propuesta para "Parte de otro día"** (022): `rpc('ultimo_dia_sin_parte')` → `'AAAA-MM-DD'` o `null` (sin días
+  pendientes). ADMIN y SUPERVISOR pueden pasar `{ p_operario: 'T002' }`.
 - **Selectores de partes**: catálogos con `.eq('activo', true)`; para mostrar partes antiguos, leer sin filtro.
 - **Guardar parte**: `rpc('guardar_parte', { p_id_parte: null | uuid, p_cab: {...}, p_lineas: [...] })`
   (`t_alm`/`t_com` como intervalo, p. ej. `'30 minutes'`; líneas con `id_linea` se actualizan, sin él se crean).

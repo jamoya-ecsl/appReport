@@ -30,7 +30,7 @@ Node ≥ 22. `.env` se copia de `.env.example`, con la clave **publishable/anon*
 ## Arquitectura
 
 ### Base de datos (`supabase/`)
-- `propuesta/NNN_*.sql` son las migraciones, numeradas y en orden (001–021). Varias se aplicaron desde el SQL Editor y
+- `propuesta/NNN_*.sql` son las migraciones, numeradas y en orden (001–022). Varias se aplicaron desde el SQL Editor y
   **no figuran en el historial de migraciones**: estos archivos son el registro.
 - Cada migración nueva lleva su fila en la tabla de `supabase/README.md`, con fecha, cómo se aplicó y el resultado de
   las pruebas. El README es también la referencia de permisos por rol y de las RPC para la interfaz.
